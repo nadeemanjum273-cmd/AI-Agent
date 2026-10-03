@@ -39,15 +39,7 @@ export default function EcommerceAgentApp() {
     {
       id: "welcome-1",
       role: "model",
-      content: `Hello! 👋 I'm **Charlie**, your AI Customer Sales & Support Agent at **TechMart**. 
-
-I can assist you with:
-- 🛍️ **Product & Pricing Info:** Check availability, specifications, discounts, and current promotions.
-- 📦 **Order Tracking:** Lookup real-time status using your Order ID (e.g., \`ORD-9021\`).
-- 📜 **Company Policies:** Instant info on Returns, Refunds, Shipping, and Warranties.
-- 💸 **Refund Processing:** Submit refund requests for instant evaluation against policy rules, automated email dispatch, and Google Sheets logging!
-
-How can I help you today?`,
+      content: "I am Charlie, Tech Support. How can I help you?",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     }
   ]);

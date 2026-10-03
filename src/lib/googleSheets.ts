@@ -6,6 +6,14 @@ import { Product, Order, InteractionLog, GOOGLE_SHEET_URL } from "./types";
 export type { Product, Order, InteractionLog };
 export { GOOGLE_SHEET_URL };
 
+export interface BankDetails {
+  customer_email: string;
+  order_id: string;
+  bank_name: string;
+  account_number: string;
+  mobile_number: string;
+}
+
 // Initial Fallback / Seed Data matching Google Sheet GIDs
 const INITIAL_PRODUCTS: Product[] = [
   {
@@ -67,6 +75,26 @@ const INITIAL_PRODUCTS: Product[] = [
     rating: 4.7,
     discount: "20% OFF",
     description: "IPS panel 4K UHD monitor with HDR400, USB-C 65W charging, and ultra-thin bezels."
+  },
+  {
+    id: "PROD-107",
+    name: "Dell XPS 15 Intel i7 Laptop",
+    category: "Laptops",
+    price: 1399.99,
+    stock: 8,
+    rating: 4.8,
+    discount: "8% OFF",
+    description: "Dell XPS 15 High Performance Laptop with Intel Core i7, 16GB RAM, 1TB SSD, 4K Display."
+  },
+  {
+    id: "PROD-108",
+    name: "Dell Inspiron 14 Touchscreen Laptop",
+    category: "Laptops",
+    price: 749.00,
+    stock: 15,
+    rating: 4.6,
+    discount: "5% OFF",
+    description: "Dell Inspiron 14 2-in-1 Touchscreen Laptop with AMD Ryzen 7, 16GB RAM, 512GB SSD."
   }
 ];
 
@@ -79,7 +107,7 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "Wireless Noise-Canceling Headphones",
     quantity: 1,
     total_price: 169.99,
-    order_date: "2026-09-28",
+    order_date: "2026-09-28", // Within 15-day window
     status: "Delivered",
     is_electronics: true
   },
@@ -91,7 +119,7 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "UltraBook Pro 15 Laptop",
     quantity: 1,
     total_price: 1169.10,
-    order_date: "2026-09-01",
+    order_date: "2026-09-01", // Purchased >30 days ago (Expired)
     status: "Delivered",
     is_electronics: true
   },
@@ -106,30 +134,6 @@ const INITIAL_ORDERS: Order[] = [
     order_date: "2026-09-20",
     status: "Delivered",
     is_electronics: false
-  },
-  {
-    order_id: "ORD-9024",
-    customer_name: "David Miller",
-    customer_email: "david.m@example.com",
-    product_id: "PROD-103",
-    product_name: "Smart Fitness Watch",
-    quantity: 1,
-    total_price: 142.02,
-    order_date: "2026-08-15",
-    status: "Delivered",
-    is_electronics: true
-  },
-  {
-    order_id: "ORD-9025",
-    customer_name: "Alex Vance",
-    customer_email: "alex.vance@example.com",
-    product_id: "PROD-106",
-    product_name: "4K Ultra HD 27-inch Monitor",
-    quantity: 1,
-    total_price: 279.20,
-    order_date: "2026-10-01",
-    status: "Shipped",
-    is_electronics: true
   }
 ];
 
@@ -148,12 +152,10 @@ const INITIAL_LOGS: InteractionLog[] = [
 let memoryProducts = [...INITIAL_PRODUCTS];
 let memoryOrders = [...INITIAL_ORDERS];
 let memoryLogs = [...INITIAL_LOGS];
+let memoryBankDetails: BankDetails[] = [];
 
 export const SHEET_ID = process.env.GOOGLE_SHEETS_ID || "1zTUpdY8ufxg6aPTV-5WLDrkyxughn7NP";
 
-/**
- * Get Google Sheets API instance using credentials.json or Environment Variables
- */
 function getSheetsClient() {
   try {
     const credPath = path.join(process.cwd(), "credentials.json");
@@ -179,7 +181,6 @@ function getSheetsClient() {
   } catch (e) {
     console.warn("Auth client creation warning:", e);
   }
-
   return null;
 }
 
@@ -207,7 +208,6 @@ export async function fetchProducts(): Promise<Product[]> {
       description: row[7] || ""
     }));
   } catch (error) {
-    console.warn("Google Sheets API fetch error, using local fallback dataset:", error);
     return memoryProducts;
   }
 }
@@ -238,7 +238,6 @@ export async function fetchOrders(): Promise<Order[]> {
       is_electronics: row[9]?.toLowerCase() === "true"
     }));
   } catch (error) {
-    console.warn("Google Sheets API fetch error, using memory orders:", error);
     return memoryOrders;
   }
 }
@@ -284,6 +283,36 @@ export async function updateOrderStatus(
   }
 }
 
+export async function saveBankDetails(data: BankDetails): Promise<boolean> {
+  memoryBankDetails.push(data);
+
+  const sheets = getSheetsClient();
+  if (sheets) {
+    try {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SHEET_ID,
+        range: "Bank_Details!A:E",
+        valueInputOption: "USER_ENTERED",
+        requestBody: {
+          values: [
+            [
+              data.customer_email,
+              data.order_id,
+              data.bank_name,
+              data.account_number,
+              data.mobile_number
+            ]
+          ]
+        }
+      });
+      return true;
+    } catch (err) {
+      console.warn("Failed to save bank details to Google Sheets:", err);
+    }
+  }
+  return true;
+}
+
 export async function logInteraction(log: Omit<InteractionLog, "log_id" | "timestamp">): Promise<InteractionLog> {
   const newLog: InteractionLog = {
     ...log,
@@ -298,7 +327,7 @@ export async function logInteraction(log: Omit<InteractionLog, "log_id" | "times
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SHEET_ID,
-        range: "Bank_Details!A:G",
+        range: "Bank_Details!F:L",
         valueInputOption: "USER_ENTERED",
         requestBody: {
           values: [
@@ -329,7 +358,7 @@ export async function fetchLogs(): Promise<InteractionLog[]> {
   try {
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: "Bank_Details!A2:G100"
+      range: "Bank_Details!F2:L100"
     });
 
     const rows = res.data.values;

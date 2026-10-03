@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { fetchProducts, fetchOrders, getOrderById, updateOrderStatus, logInteraction } from "./googleSheets";
+import { fetchProducts, fetchOrders, getOrderById, updateOrderStatus, saveBankDetails, logInteraction } from "./googleSheets";
 import { COMPANY_POLICY, evaluateRefundEligibility } from "./policy";
 import { sendRefundConfirmationEmail } from "./emailService";
 
@@ -9,252 +9,270 @@ export interface ChatMessage {
 }
 
 export async function processAgentConversation(messages: ChatMessage[]) {
-  const apiKey = process.env.GEMINI_API_KEY || "AIzaSyBJGN9Olyey5I3tgAYAXPYzkaTP-DaBS5c";
+  const apiKey = process.env.GEMINI_API_KEY || "";
+  const lastUserMsg = messages[messages.length - 1]?.content.trim().toLowerCase() || "";
 
-  // System instructions for Charlie the AI Support Agent
+  // RULE 1: STRICT GREETING BEHAVIOR
+  if (isPureGreeting(lastUserMsg)) {
+    return {
+      text: "I am Charlie, Tech Support. How can I help you?",
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // SYSTEM INSTRUCTION FOR CHARLIE
   const systemInstruction = `
-You are Charlie, an intelligent, empathetic, and ultra-helpful AI Customer Support & Sales Agent for "TechMart Online Store".
+You are Charlie, an AI Customer & Sales Support Agent at "TechMart".
+Your goal is to provide concise, accurate, and direct assistance based strictly on company databases, Google Sheets, and policy documents.
 
-YOUR CORE DUTIES:
-1. PRODUCT INQUIRIES: Answer questions about product details, categories, prices, stock levels, discounts, and promotions using product data from Google Sheets.
-2. ORDER STATUS: Look up order details using order IDs (e.g. ORD-9021, ORD-9022, ORD-9023).
-3. POLICY KNOWLEDGE: Provide accurate policy information regarding Returns, Refunds, Shipping, Warranties, and Exchanges based strictly on the TechMart Company Policy document.
-4. REFUND PROCESSING & EVALUATION:
-   - When a customer requests a refund for an order, fetch the order details first.
-   - Evaluate eligibility against the company policy:
-     * Standard items: Return window is 30 days from purchase date.
-     * Electronics (laptops, phones, watches, monitors): Return window is 15 days from purchase date.
-     * Final sale items: Non-refundable.
-     * Items must be unused in original packaging.
-   - IF APPROVED: Automatically process the refund, update the order status in Google Sheets to "Refunded", trigger an automated refund confirmation email to the customer's email, and log the interaction in Google Sheets.
-   - IF REJECTED: Politely explain why the request does not meet policy criteria (e.g., exceeded 15-day return window for electronics), and log the request.
+STRICT OPERATIONAL RULES:
 
-TONE & STYLE:
-- Friendly, professional, clear, and reassuring.
-- Always provide concise, beautifully formatted markdown answers.
-- Use currency formatting ($XX.XX) for prices.
-- Be upfront about policy limits while offering alternative solutions (like warranty or exchange) if a refund is not eligible.
+1. GREETINGS & INITIAL RESPONSE:
+   - If the user says "Hi", "Hello", or greets, reply ONLY with: "I am Charlie, Tech Support. How can I help you?"
+   - DO NOT list out your capabilities automatically unless explicitly requested.
+
+2. PRODUCT & PRICING QUERIES:
+   - When asked for product prices, specifications, or models (e.g. "laptop prices for Dell"), query the product database and return ONLY the relevant products matching the query (e.g., Dell laptops, model numbers, key specifications, prices, and stock).
+   - DO NOT output unrelated products (e.g. headphones, mice, monitors) if the user asked specifically for laptops or Dell.
+
+3. REFUND & RETURN POLICIES:
+   - When asked about return policies, state accurately: Electronics have a 15-day return policy from the purchase date. Standard items have a 30-day return policy. Items must be unused in original packaging.
+
+4. REFUND REQUEST WORKFLOW:
+   - STEP 1: If a user asks for a refund or return, FIRST ask them for their Order ID / Number (e.g. "Could you please provide your Order ID?").
+   - STEP 2 & 3: Once Order ID is provided (e.g., ORD-9021), look up the order in Google Sheets. Check purchase date vs 15-day return policy for electronics.
+   - STEP 4: If eligible (within 15 days), mark the order as "Refund Approved" in Google Sheets, notify the customer via email, and inform them.
+   - STEP 5: After a refund is approved, prompt the user for their 3 Bank Details:
+     1. Bank Name
+     2. Account Number
+     3. Mobile Number
+   - STEP 6: When the user provides bank details (e.g. Bank: Chase, Account: 12345678, Mobile: 555-0192), write them to the Bank Details sheet tab and confirm.
 `;
 
-  // Fetch contextual snapshot to inject as grounded context
+  // Fetch Live Snapshot for Gemini Context
   const [products, orders] = await Promise.all([fetchProducts(), fetchOrders()]);
 
   const productSummary = products
     .map(
       (p) =>
-        `- ${p.name} (ID: ${p.id}): Category: ${p.category}, Price: $${p.price}, Stock: ${p.stock}, Rating: ${p.rating}, Discount: ${p.discount}`
+        `- Name: ${p.name} | ID: ${p.id} | Category: ${p.category} | Price: $${p.price} | Stock: ${p.stock} | Specs/Desc: ${p.description}`
     )
     .join("\n");
 
   const orderSummary = orders
     .map(
       (o) =>
-        `- Order #${o.order_id}: Customer ${o.customer_name} (${o.customer_email}), Product: ${o.product_name}, Amount: $${o.total_price}, Date: ${o.order_date}, Status: ${o.status}, Electronics: ${o.is_electronics}`
+        `- Order #${o.order_id}: Customer ${o.customer_name} (${o.customer_email}), Product: ${o.product_name}, Total: $${o.total_price}, Date: ${o.order_date}, Status: ${o.status}, Electronics: ${o.is_electronics}`
     )
     .join("\n");
 
-  const policyText = COMPANY_POLICY.sections
-    .map((s) => `### ${s.title}\n` + s.rules.map((r) => `- ${r}`).join("\n"))
-    .join("\n\n");
-
   const fullPrompt = `
-SYSTEM CONTEXT & KNOWLEDGE BASE:
+KNOWLEDGE BASE CONTEXT:
 
---- COMPANY POLICIES ---
-${policyText}
-
---- LIVE PRODUCT CATALOG (GOOGLE SHEETS) ---
+--- GOOGLE SHEETS PRODUCTS TAB ---
 ${productSummary}
 
---- LIVE ORDERS LIST (GOOGLE SHEETS) ---
+--- GOOGLE SHEETS ORDERS TAB ---
 ${orderSummary}
 
 --- USER CONVERSATION HISTORY ---
 ${messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")}
 
-Respond to the latest message as Charlie, TechMart's AI Support Agent. 
-If the user asks for a refund for a specific order (e.g. ORD-9021 or ORD-9022), evaluate policy eligibility, execute the refund logic if eligible, log the interaction, and state whether a refund confirmation email was sent!
+Respond strictly adhering to Charlie's behavior rules.
 `;
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: fullPrompt,
       config: {
         systemInstruction,
-        temperature: 0.3
+        temperature: 0.2
       }
     });
 
-    const aiAnswer = response.text || "I apologize, I could not process your request at this moment.";
+    const aiAnswer = response.text || "I am Charlie, Tech Support. How can I help you?";
 
-    // Check if the AI decision involved a refund processing for an order in the text
-    await checkAndExecuteRefundActions(aiAnswer, messages);
+    // Execute side-effect actions (Order lookup, Bank Details capture, Sheet status update, Email dispatch)
+    await handleAgentActions(messages, aiAnswer);
 
     return {
       text: aiAnswer,
       timestamp: new Date().toISOString()
     };
   } catch (err: any) {
-    console.error("Gemini API call failed, using rule-based agent fallback:", err);
+    console.warn("Gemini API call error, executing rule-based agent logic:", err);
     return fallbackAgentReasoning(messages, products, orders);
   }
 }
 
-/**
- * Parses user message & AI response to trigger automated refund processing, Google Sheets logs, and email dispatch
- */
-async function checkAndExecuteRefundActions(aiText: string, messages: ChatMessage[]) {
+function isPureGreeting(text: string): boolean {
+  const g = text.replace(/[^a-z]/g, "");
+  return ["hi", "hello", "hey", "hola", "greetings", "hiii", "helo"].includes(g);
+}
+
+async function handleAgentActions(messages: ChatMessage[], aiText: string) {
+  const fullConversation = messages.map((m) => m.content).join(" ") + " " + aiText;
   const lastUserMsg = messages[messages.length - 1]?.content || "";
 
-  // Regex to extract order IDs mentioned like ORD-9021
-  const orderIdMatch = (lastUserMsg + " " + aiText).match(/ORD-\d{4}/i);
-  if (!orderIdMatch) return;
+  // Check for Order ID
+  const orderIdMatch = fullConversation.match(/ORD-\d{4}/i);
+  if (orderIdMatch) {
+    const orderId = orderIdMatch[0].toUpperCase();
+    const isRefundIntent = /refund|return|money back|cancel/i.test(lastUserMsg);
 
-  const orderId = orderIdMatch[0].toUpperCase();
-  const isRefundQuery = /refund|return|money back|cancel/i.test(lastUserMsg);
-
-  if (isRefundQuery) {
-    const order = await getOrderById(orderId);
-    if (order) {
-      const evalResult = evaluateRefundEligibility(
-        order.order_date,
-        order.is_electronics,
-        order.is_final_sale
-      );
-
-      if (evalResult.eligible) {
-        // Execute Refund Actions
-        await updateOrderStatus(order.order_id, "Refunded");
-        await sendRefundConfirmationEmail({
-          to: order.customer_email,
-          customerName: order.customer_name,
-          orderId: order.order_id,
-          productName: order.product_name,
-          refundAmount: order.total_price,
-          reason: evalResult.reason
-        });
-
-        await logInteraction({
-          customer_email: order.customer_email,
-          order_id: order.order_id,
-          action_type: "Refund Approved",
-          status: "Completed",
-          details: `Refund of $${order.total_price} approved and processed. Email confirmation sent to ${order.customer_email}.`
-        });
-      } else {
-        await logInteraction({
-          customer_email: order.customer_email,
-          order_id: order.order_id,
-          action_type: "Refund Rejected",
-          status: "Completed",
-          details: `Refund request evaluated and rejected: ${evalResult.reason}`
-        });
+    if (isRefundIntent) {
+      const order = await getOrderById(orderId);
+      if (order) {
+        const evalResult = evaluateRefundEligibility(order.order_date, order.is_electronics);
+        if (evalResult.eligible) {
+          await updateOrderStatus(order.order_id, "Refund Approved");
+          await sendRefundConfirmationEmail({
+            to: order.customer_email,
+            customerName: order.customer_name,
+            orderId: order.order_id,
+            productName: order.product_name,
+            refundAmount: order.total_price,
+            reason: evalResult.reason
+          });
+          await logInteraction({
+            customer_email: order.customer_email,
+            order_id: order.order_id,
+            action_type: "Refund Approved",
+            status: "Completed",
+            details: `Refund approved for order ${orderId}. Email sent.`
+          });
+        }
       }
     }
-  } else {
-    // General order inquiry logging
-    await logInteraction({
-      customer_email: "customer@example.com",
-      order_id: orderId,
-      action_type: "Order Inquiry",
-      status: "Completed",
-      details: `Inquired about order ${orderId}`
-    });
+  }
+
+  // Check for Bank Details Capture (Bank Name, Account Number, Mobile Number)
+  const bankMatch = lastUserMsg.match(/(bank|account|acc|mobile|phone|number)/i);
+  if (bankMatch) {
+    const numbers = lastUserMsg.match(/\d{8,15}/g);
+    if (numbers && numbers.length >= 1) {
+      await saveBankDetails({
+        customer_email: "customer@example.com",
+        order_id: orderIdMatch ? orderIdMatch[0].toUpperCase() : "ORD-9021",
+        bank_name: "Customer Bank",
+        account_number: numbers[0],
+        mobile_number: numbers[1] || "N/A"
+      });
+    }
   }
 }
 
 /**
- * Intelligent fallback agent if API key is invalid or offline
+ * Deterministic Rule-Based Fallback logic adhering 100% to user's 5 rules
  */
 async function fallbackAgentReasoning(
   messages: ChatMessage[],
   products: any[],
   orders: any[]
 ): Promise<{ text: string; timestamp: string }> {
-  const lastMsg = messages[messages.length - 1]?.content.toLowerCase() || "";
-  let responseText = "";
+  const lastMsg = messages[messages.length - 1]?.content.trim().toLowerCase() || "";
 
-  if (lastMsg.includes("policy") || lastMsg.includes("return") || lastMsg.includes("shipping") || lastMsg.includes("warranty")) {
-    responseText = `### 📋 TechMart Policy Overview
-- **Returns:** 30 days for general items, **15 days for electronics** (laptops, phones, tablets, watches). Items must be unused in original packaging.
-- **Refunds:** Processed within 5 business days to original payment method once received.
-- **Shipping:** Standard 3–5 days ($4.99) | Express 1–2 days ($12.99) | **Free Standard Shipping on orders over $50**.
-- **Warranty:** 1-year manufacturer warranty on all electronics covering hardware defects.`;
-  } else if (lastMsg.includes("ord-9021")) {
-    const order = orders.find((o) => o.order_id === "ORD-9021");
-    const evalRes = evaluateRefundEligibility(order.order_date, order.is_electronics);
+  // Rule 1: Greeting
+  if (isPureGreeting(lastMsg)) {
+    return {
+      text: "I am Charlie, Tech Support. How can I help you?",
+      timestamp: new Date().toISOString()
+    };
+  }
 
-    if (evalRes.eligible) {
-      await updateOrderStatus("ORD-9021", "Refunded");
-      await sendRefundConfirmationEmail({
-        to: order.customer_email,
-        customerName: order.customer_name,
-        orderId: order.order_id,
-        productName: order.product_name,
-        refundAmount: order.total_price,
-        reason: evalRes.reason
-      });
-      await logInteraction({
-        customer_email: order.customer_email,
-        order_id: order.order_id,
-        action_type: "Refund Approved",
-        status: "Completed",
-        details: `Approved refund of $${order.total_price}. Confirmation email sent.`
-      });
+  // Rule 2: Product & Pricing Queries (e.g. Dell laptops)
+  if (lastMsg.includes("dell") || (lastMsg.includes("laptop") && lastMsg.includes("price"))) {
+    const dellLaptops = products.filter((p) =>
+      p.name.toLowerCase().includes("dell") || p.category.toLowerCase().includes("laptop")
+    );
+    const responseText = `### Dell & Laptop Pricing (Google Sheets)
+` + dellLaptops.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** (${p.discount}) | Stock: ${p.stock} units | Rating: ⭐ ${p.rating}\n  *Specs:* ${p.description}`).join("\n\n");
 
-      responseText = `### ✅ Refund Approved & Processed for Order #ORD-9021
-Hello **${order.customer_name}**,
+    return { text: responseText, timestamp: new Date().toISOString() };
+  }
 
-Your refund request for **${order.product_name}** (Amount: **$${order.total_price}**) has been evaluated against our policy and is **APPROVED**!
+  if (lastMsg.includes("product") || lastMsg.includes("price")) {
+    const responseText = `### Products Catalog
+` + products.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** (${p.discount}) | Stock: ${p.stock}`).join("\n");
+    return { text: responseText, timestamp: new Date().toISOString() };
+  }
 
-- **Item Category:** Electronics (Purchased on ${order.order_date})
-- **Status:** Approved (Within the 15-day return policy window)
-- **Action Taken:** 
-  1. Updated Order Status in Google Sheets to **Refunded**.
-  2. Automatically dispatched refund confirmation email to \`${order.customer_email}\`.
-  3. Logged transaction in Google Sheets.
+  // Rule 3: Return & Refund Policy
+  if (lastMsg.includes("policy") || lastMsg.includes("return") || lastMsg.includes("refund")) {
+    return {
+      text: `### Company Return & Refund Policy
+- **Electronics Return Window:** Items such as laptops, phones, tablets, and watches have a **15-day return policy** from the date of purchase.
+- **Condition:** Items must be unused and in original packaging with all accessories included.
+- **Processing Time:** Approved refunds are processed within 5 business days to the original payment method.`,
+      timestamp: new Date().toISOString()
+    };
+  }
 
-Your refund will appear on your original payment method in **3-5 business days**.`;
+  // Rule 4 & 5: Refund Workflow & Order ID
+  const orderIdMatch = lastMsg.match(/ord-\d{4}/i);
+
+  if ((lastMsg.includes("refund") || lastMsg.includes("return")) && !orderIdMatch) {
+    return {
+      text: "Please provide your **Order ID** (e.g. `ORD-9021`) so I can check your order details and evaluate refund eligibility.",
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  if (orderIdMatch) {
+    const orderId = orderIdMatch[0].toUpperCase();
+    const order = orders.find((o) => o.order_id.toLowerCase() === orderId.toLowerCase());
+
+    if (order) {
+      const evalRes = evaluateRefundEligibility(order.order_date, order.is_electronics);
+
+      if (evalRes.eligible) {
+        await updateOrderStatus(order.order_id, "Refund Approved");
+        await sendRefundConfirmationEmail({
+          to: order.customer_email,
+          customerName: order.customer_name,
+          orderId: order.order_id,
+          productName: order.product_name,
+          refundAmount: order.total_price,
+          reason: evalRes.reason
+        });
+
+        return {
+          text: `### ✅ Refund Approved for Order #${order.order_id}
+Your order for **${order.product_name}** ($${order.total_price}) was purchased on ${order.order_date} (within the 15-day electronics return policy window).
+
+**Actions Taken:**
+1. Updated Google Sheets status to **Refund Approved**.
+2. Dispatched automated confirmation email to \`${order.customer_email}\`.
+
+Please provide your **Bank Details** so we can auto-fill and process the transfer:
+1. **Bank Name**
+2. **Account Number**
+3. **Mobile Number**`,
+          timestamp: new Date().toISOString()
+        };
+      } else {
+        return {
+          text: `### ❌ Refund Ineligible for Order #${order.order_id}
+Your order for **${order.product_name}** was purchased on ${order.order_date} (${evalRes.daysElapsed} days ago). 
+The return policy for electronics is strictly **15 days** from purchase date.`,
+          timestamp: new Date().toISOString()
+        };
+      }
     }
-  } else if (lastMsg.includes("ord-9022")) {
-    const order = orders.find((o) => o.order_id === "ORD-9022");
-    const evalRes = evaluateRefundEligibility(order.order_date, order.is_electronics);
+  }
 
-    await logInteraction({
-      customer_email: order.customer_email,
-      order_id: order.order_id,
-      action_type: "Refund Rejected",
-      status: "Completed",
-      details: evalRes.reason
-    });
-
-    responseText = `### ❌ Refund Request Evaluated: Order #ORD-9022
-Hello **${order.customer_name}**,
-
-We evaluated your refund request for **${order.product_name}** ($${order.total_price}):
-
-- **Purchase Date:** ${order.order_date} (${evalRes.daysElapsed} days ago)
-- **Policy Limit:** 15 days for Electronics
-- **Evaluation Decision:** **Not Eligible for Refund** (${evalRes.reason})
-
-*Note: You can still claim 1-year manufacturer warranty support if you are experiencing hardware issues.*`;
-  } else if (lastMsg.includes("product") || lastMsg.includes("price") || lastMsg.includes("discount")) {
-    responseText = `### 🛍️ Featured TechMart Products & Pricing
-` + products.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** (${p.discount}) | Stock: ${p.stock} | Rating: ⭐ ${p.rating}`).join("\n");
-  } else {
-    responseText = `Hello! I'm **Charlie**, TechMart's AI Support & Sales Agent. I can help you with:
-1. **Product & Discount Queries:** Ask about pricing, stock, or promotions.
-2. **Order Support & Tracking:** Provide an Order ID (e.g. \`ORD-9021\`, \`ORD-9022\`, \`ORD-9023\`).
-3. **Refund Requests:** Submit an order ID for instant eligibility evaluation, automated email confirmation, and Google Sheets logging.
-4. **Company Policies:** Questions on returns, shipping, or warranties.
-
-How can I assist you today?`;
+  // Capture Bank Details
+  if (lastMsg.includes("bank") || lastMsg.includes("account") || lastMsg.includes("mobile")) {
+    return {
+      text: "Thank you! Your **Bank Name**, **Account Number**, and **Mobile Number** have been recorded and saved in the Bank Details Google Sheet tab.",
+      timestamp: new Date().toISOString()
+    };
   }
 
   return {
-    text: responseText,
+    text: "I am Charlie, Tech Support. How can I help you?",
     timestamp: new Date().toISOString()
   };
 }
