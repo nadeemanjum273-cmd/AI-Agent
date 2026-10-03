@@ -1,10 +1,12 @@
 import { google } from "googleapis";
+import fs from "fs";
+import path from "path";
 import { Product, Order, InteractionLog, GOOGLE_SHEET_URL } from "./types";
 
 export type { Product, Order, InteractionLog };
 export { GOOGLE_SHEET_URL };
 
-// Initial Mock / Fallback Sync Data matching Google Sheet GIDs
+// Initial Fallback / Seed Data matching Google Sheet GIDs
 const INITIAL_PRODUCTS: Product[] = [
   {
     id: "PROD-101",
@@ -77,7 +79,7 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "Wireless Noise-Canceling Headphones",
     quantity: 1,
     total_price: 169.99,
-    order_date: "2026-09-28", // Purchased 5 days ago (Within 15-day electronics window)
+    order_date: "2026-09-28",
     status: "Delivered",
     is_electronics: true
   },
@@ -89,7 +91,7 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "UltraBook Pro 15 Laptop",
     quantity: 1,
     total_price: 1169.10,
-    order_date: "2026-09-01", // Purchased >30 days ago (Expired)
+    order_date: "2026-09-01",
     status: "Delivered",
     is_electronics: true
   },
@@ -101,7 +103,7 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "Ergonomic Wireless Mouse",
     quantity: 2,
     total_price: 89.98,
-    order_date: "2026-09-20", // Purchased 13 days ago (Within 30-day non-electronics window)
+    order_date: "2026-09-20",
     status: "Delivered",
     is_electronics: false
   },
@@ -113,7 +115,7 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "Smart Fitness Watch",
     quantity: 1,
     total_price: 142.02,
-    order_date: "2026-08-15", // Purchased >45 days ago (Expired)
+    order_date: "2026-08-15",
     status: "Delivered",
     is_electronics: true
   },
@@ -125,7 +127,7 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "4K Ultra HD 27-inch Monitor",
     quantity: 1,
     total_price: 279.20,
-    order_date: "2026-10-01", // Purchased 2 days ago
+    order_date: "2026-10-01",
     status: "Shipped",
     is_electronics: true
   }
@@ -143,7 +145,6 @@ const INITIAL_LOGS: InteractionLog[] = [
   }
 ];
 
-// Global in-memory storage for active session fallback
 let memoryProducts = [...INITIAL_PRODUCTS];
 let memoryOrders = [...INITIAL_ORDERS];
 let memoryLogs = [...INITIAL_LOGS];
@@ -151,23 +152,35 @@ let memoryLogs = [...INITIAL_LOGS];
 export const SHEET_ID = process.env.GOOGLE_SHEETS_ID || "1zTUpdY8ufxg6aPTV-5WLDrkyxughn7NP";
 
 /**
- * Get Google Sheets API instance if service account credentials are available
+ * Get Google Sheets API instance using credentials.json or Environment Variables
  */
 function getSheetsClient() {
-  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  try {
+    const credPath = path.join(process.cwd(), "credentials.json");
+    if (fs.existsSync(credPath)) {
+      const auth = new google.auth.GoogleAuth({
+        keyFile: credPath,
+        scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+      });
+      return google.sheets({ version: "v4", auth });
+    }
 
-  if (!clientEmail || !privateKey) {
-    return null;
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+    const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+    if (clientEmail && privateKey) {
+      const auth = new google.auth.JWT({
+        email: clientEmail,
+        key: privateKey,
+        scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+      });
+      return google.sheets({ version: "v4", auth });
+    }
+  } catch (e) {
+    console.warn("Auth client creation warning:", e);
   }
 
-  const auth = new google.auth.JWT({
-    email: clientEmail,
-    key: privateKey,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"]
-  });
-
-  return google.sheets({ version: "v4", auth });
+  return null;
 }
 
 export async function fetchProducts(): Promise<Product[]> {
@@ -194,7 +207,7 @@ export async function fetchProducts(): Promise<Product[]> {
       description: row[7] || ""
     }));
   } catch (error) {
-    console.warn("Google Sheets API fetch failed, falling back to local dataset:", error);
+    console.warn("Google Sheets API fetch error, using local fallback dataset:", error);
     return memoryProducts;
   }
 }
@@ -225,7 +238,7 @@ export async function fetchOrders(): Promise<Order[]> {
       is_electronics: row[9]?.toLowerCase() === "true"
     }));
   } catch (error) {
-    console.warn("Google Sheets API fetch failed, using memory orders:", error);
+    console.warn("Google Sheets API fetch error, using memory orders:", error);
     return memoryOrders;
   }
 }
@@ -242,7 +255,6 @@ export async function updateOrderStatus(
   orderId: string,
   newStatus: Order["status"]
 ): Promise<boolean> {
-  // Update memory state
   const order = memoryOrders.find((o) => o.order_id.toLowerCase() === orderId.toLowerCase());
   if (order) {
     order.status = newStatus;
@@ -328,8 +340,8 @@ export async function fetchLogs(): Promise<InteractionLog[]> {
       timestamp: row[1] || new Date().toISOString(),
       customer_email: row[2] || "",
       order_id: row[3] || "",
-      action_type: row[4] as InteractionLog["action_type"] || "Order Inquiry",
-      status: row[5] as InteractionLog["status"] || "Completed",
+      action_type: (row[4] as InteractionLog["action_type"]) || "Order Inquiry",
+      status: (row[5] as InteractionLog["status"]) || "Completed",
       details: row[6] || ""
     }));
 
