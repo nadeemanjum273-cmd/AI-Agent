@@ -14,7 +14,7 @@ export interface BankDetails {
   mobile_number: string;
 }
 
-// Initial Fallback / Seed Data matching Google Sheet GIDs
+// Initial Products Dataset
 const INITIAL_PRODUCTS: Product[] = [
   {
     id: "PROD-101",
@@ -98,7 +98,44 @@ const INITIAL_PRODUCTS: Product[] = [
   }
 ];
 
+// Initial Customer Orders Dataset (including Zulqarnain, Junaid, and Abdul Rehman)
 const INITIAL_ORDERS: Order[] = [
+  {
+    order_id: "ORD-9026",
+    customer_name: "Zulqarnain",
+    customer_email: "zulqarnain@example.com",
+    product_id: "PROD-107",
+    product_name: "Dell XPS 15 Intel i7 Laptop",
+    quantity: 1,
+    total_price: 1399.99,
+    order_date: "2026-09-28", // Purchased 5 days ago (Within 15-day electronics return window -> Eligible)
+    status: "Delivered",
+    is_electronics: true
+  },
+  {
+    order_id: "ORD-9027",
+    customer_name: "Junaid",
+    customer_email: "junaid@example.com",
+    product_id: "PROD-101",
+    product_name: "Wireless Noise-Canceling Headphones",
+    quantity: 1,
+    total_price: 169.99,
+    order_date: "2026-09-01", // Purchased >30 days ago (Expired 15-day window -> Ineligible)
+    status: "Delivered",
+    is_electronics: true
+  },
+  {
+    order_id: "ORD-9028",
+    customer_name: "Abdul Rehman",
+    customer_email: "abdul.rehman@example.com",
+    product_id: "PROD-105",
+    product_name: "Ergonomic Wireless Mouse",
+    quantity: 2,
+    total_price: 89.98,
+    order_date: "2026-09-20", // Purchased 13 days ago (Within 30-day standard return window -> Eligible)
+    status: "Delivered",
+    is_electronics: false
+  },
   {
     order_id: "ORD-9021",
     customer_name: "Sarah Jenkins",
@@ -107,7 +144,7 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "Wireless Noise-Canceling Headphones",
     quantity: 1,
     total_price: 169.99,
-    order_date: "2026-09-28", // Within 15-day window
+    order_date: "2026-09-28",
     status: "Delivered",
     is_electronics: true
   },
@@ -119,21 +156,9 @@ const INITIAL_ORDERS: Order[] = [
     product_name: "UltraBook Pro 15 Laptop",
     quantity: 1,
     total_price: 1169.10,
-    order_date: "2026-09-01", // Purchased >30 days ago (Expired)
+    order_date: "2026-09-01",
     status: "Delivered",
     is_electronics: true
-  },
-  {
-    order_id: "ORD-9023",
-    customer_name: "Emily Rodriguez",
-    customer_email: "emily.r@example.com",
-    product_id: "PROD-105",
-    product_name: "Ergonomic Wireless Mouse",
-    quantity: 2,
-    total_price: 89.98,
-    order_date: "2026-09-20",
-    status: "Delivered",
-    is_electronics: false
   }
 ];
 
@@ -141,11 +166,11 @@ const INITIAL_LOGS: InteractionLog[] = [
   {
     log_id: "LOG-1001",
     timestamp: new Date("2026-10-02T14:32:00Z").toISOString(),
-    customer_email: "sarah.j@example.com",
-    order_id: "ORD-9021",
+    customer_email: "zulqarnain@example.com",
+    order_id: "ORD-9026",
     action_type: "Order Inquiry",
     status: "Completed",
-    details: "Checked delivery tracking status for ORD-9021."
+    details: "Checked order details for Dell XPS 15 Laptop."
   }
 ];
 
