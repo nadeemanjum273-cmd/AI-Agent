@@ -111,28 +111,34 @@ function isPureGreeting(text: string): boolean {
 async function handleAgentActions(messages: ChatMessage[], aiText: string) {
   const fullConversation = messages.map((m) => m.content).join(" ") + " " + aiText;
   const lastUserMsg = messages[messages.length - 1]?.content || "";
+  const lowerMsg = lastUserMsg.toLowerCase();
 
-  // Check for Order Placement Intent (buy, purchase, order, confirm)
-  const isOrderCreation = /buy|purchase|place order|order item|confirm order|proceed with the purchase/i.test(lastUserMsg) ||
-    /finalize your order|confirm if you would like to proceed/i.test(aiText);
+  const isReturnRefund = /return|refund|money back|cancel|exchange/i.test(lowerMsg);
+
+  // Check for Order Placement Intent ONLY if NOT return/refund
+  const isOrderCreation = !isReturnRefund && (/buy|purchase|place order|want to order|confirm purchase/i.test(lowerMsg) ||
+    /finalize your order|confirm if you would like to proceed/i.test(aiText));
 
   if (isOrderCreation) {
     let productName = "electronics";
-    if (lastUserMsg.toLowerCase().includes("pixel")) productName = "phone";
-    else if (lastUserMsg.toLowerCase().includes("macbook") || lastUserMsg.toLowerCase().includes("laptop")) productName = "laptop";
-    else if (lastUserMsg.toLowerCase().includes("headphone") || lastUserMsg.toLowerCase().includes("sony")) productName = "headphones";
-    else if (lastUserMsg.toLowerCase().includes("tablet") || lastUserMsg.toLowerCase().includes("ipad")) productName = "tablet";
+    if (lowerMsg.includes("pixel") || lowerMsg.includes("phone")) productName = "phone";
+    else if (lowerMsg.includes("macbook") || lowerMsg.includes("laptop") || lowerMsg.includes("dell")) productName = "laptop";
+    else if (lowerMsg.includes("headphone") || lowerMsg.includes("sony")) productName = "headphones";
+    else if (lowerMsg.includes("mouse")) productName = "mouse";
+    else if (lowerMsg.includes("keyboard")) productName = "keyboard";
+    else if (lowerMsg.includes("tablet") || lowerMsg.includes("ipad")) productName = "tablet";
 
-    await createNewOrder("Customer", productName, "electronics");
+    const nameMatch = lowerMsg.match(/i am ([a-z]+)/i);
+    const customerName = nameMatch ? nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1) : "Customer";
+
+    await createNewOrder(customerName, productName, "electronics");
   }
 
   // Check for Order ID / Refund Intent
   const orderIdMatch = fullConversation.match(/ORD-\d{3,4}/i);
   if (orderIdMatch) {
     const orderId = orderIdMatch[0].toUpperCase();
-    const isRefundIntent = /refund|return|money back|cancel/i.test(lastUserMsg);
-
-    if (isRefundIntent) {
+    if (isReturnRefund) {
       const order = await getOrderById(orderId);
       if (order) {
         const evalResult = evaluateRefundEligibility(order.order_date, order.is_electronics);
@@ -159,7 +165,7 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string) {
   }
 
   // Check for Bank Details Capture
-  const bankMatch = lastUserMsg.match(/(bank|account|acc|mobile|phone|number)/i);
+  const bankMatch = lowerMsg.match(/(bank|account|acc|mobile|phone|number)/i);
   if (bankMatch) {
     const numbers = lastUserMsg.match(/\d{8,15}/g);
     if (numbers && numbers.length >= 1) {
@@ -175,7 +181,7 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string) {
 }
 
 /**
- * Deterministic Rule-Based Fallback logic for Mind_Dream AI
+ * Deterministic Rule-Based Reasoning logic for Mind_Dream AI
  */
 async function fallbackAgentReasoning(
   messages: ChatMessage[],
@@ -184,7 +190,7 @@ async function fallbackAgentReasoning(
 ): Promise<{ text: string; timestamp: string }> {
   const lastMsg = messages[messages.length - 1]?.content.trim().toLowerCase() || "";
 
-  // Rule 1: Greeting
+  // 1. Pure Greeting
   if (isPureGreeting(lastMsg)) {
     return {
       text: "Hello! I am Mind_Dream AI. How can I help you today?",
@@ -192,15 +198,86 @@ async function fallbackAgentReasoning(
     };
   }
 
-  // Rule 2: Order Placement / Purchase Confirmation
-  if (lastMsg.includes("buy") || lastMsg.includes("purchase") || lastMsg.includes("confirm") || lastMsg.includes("order")) {
+  // 2. Return / Refund / Cancel Intent (HIGHEST PRIORITY over order creation)
+  const isReturnRefund = /return|refund|money back|cancel|exchange/i.test(lastMsg);
+  if (isReturnRefund) {
+    const orderIdMatch = lastMsg.match(/ORD-\d{3,4}/i);
+    if (orderIdMatch) {
+      const orderId = orderIdMatch[0].toUpperCase();
+      const order = await getOrderById(orderId);
+      if (order) {
+        const evalResult = evaluateRefundEligibility(order.order_date, order.is_electronics);
+        if (evalResult.eligible) {
+          await updateOrderStatus(order.order_id, "Refund Approved");
+          await sendRefundConfirmationEmail({
+            to: order.customer_email,
+            customerName: order.customer_name,
+            orderId: order.order_id,
+            productName: order.product_name,
+            refundAmount: order.total_price,
+            reason: evalResult.reason
+          });
+          await logInteraction({
+            customer_email: order.customer_email,
+            order_id: order.order_id,
+            action_type: "Refund Approved",
+            status: "Completed",
+            details: `Refund approved for order ${orderId}. Email sent.`
+          });
+          return {
+            text: `### ✅ Refund Approved!
+Order **${orderId}** (${order.product_name}) purchased by **${order.customer_name}** is eligible for a full refund of **$${order.total_price}**.
+
+- **Status:** Updated live in Google Sheets to \`Refund Approved\`.
+- **Confirmation Email:** Dispatched to \`${order.customer_email}\`.
+
+Please reply with your **Bank Account Number** and **Mobile Number** so we can process your payout directly!`,
+            timestamp: new Date().toISOString()
+          };
+        } else {
+          return {
+            text: `### ❌ Return Ineligible
+Order **${orderId}** was purchased on **${order.order_date}** (${evalResult.daysElapsed} days ago).
+Electronics have a strict **15-day return limit**. ${evalResult.reason}`,
+            timestamp: new Date().toISOString()
+          };
+        }
+      } else {
+        return {
+          text: `Order \`${orderId}\` was not found in our Google Sheets records. Please check the Order ID and try again.`,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
+
+    // Extract customer name if mentioned (e.g. "i am abis want to return my order")
+    const nameMatch = lastMsg.match(/i am ([a-z]+)/i);
+    const customerName = nameMatch ? nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1) : "";
+
+    return {
+      text: `### 🔄 Return & Refund Request${customerName ? ` for ${customerName}` : ""}
+I would be glad to help you process your return!
+
+Please reply with your **Order ID** (for example: \`ORD-101\` or \`ORD-105\`) so I can locate your order in Google Sheets and evaluate your return eligibility.`,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // 3. Explicit Order Placement Intent (buy / purchase / place order)
+  const isOrderPlacement = /buy|purchase|place order|want to order|confirm purchase/i.test(lastMsg);
+  if (isOrderPlacement) {
     let productName = "laptop";
-    if (lastMsg.includes("pixel") || lastMsg.includes("phone")) productName = "phone";
-    else if (lastMsg.includes("macbook") || lastMsg.includes("laptop")) productName = "laptop";
-    else if (lastMsg.includes("headphone") || lastMsg.includes("sony")) productName = "headphones";
+    if (lastMsg.includes("pixel") || lastMsg.includes("phone") || lastMsg.includes("iphone") || lastMsg.includes("samsung")) productName = "phone";
+    else if (lastMsg.includes("macbook") || lastMsg.includes("dell") || lastMsg.includes("laptop") || lastMsg.includes("hp") || lastMsg.includes("lenovo")) productName = "laptop";
+    else if (lastMsg.includes("headphone") || lastMsg.includes("sony") || lastMsg.includes("airpods") || lastMsg.includes("bose")) productName = "headphones";
+    else if (lastMsg.includes("mouse") || lastMsg.includes("logitech") || lastMsg.includes("razer")) productName = "mouse";
+    else if (lastMsg.includes("keyboard")) productName = "keyboard";
     else if (lastMsg.includes("tablet") || lastMsg.includes("ipad")) productName = "tablet";
 
-    const newOrder = await createNewOrder("Customer", productName, "electronics");
+    const nameMatch = lastMsg.match(/i am ([a-z]+)/i);
+    const customerName = nameMatch ? nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1) : "Customer";
+
+    const newOrder = await createNewOrder(customerName, productName, "electronics");
 
     return {
       text: `### 🎉 Order Placed Successfully!
@@ -210,39 +287,59 @@ Your order for **${productName}** has been confirmed and placed into our system.
 - **Order ID:** \`${newOrder.order_id}\`
 - **Customer:** ${newOrder.customer_name}
 - **Item:** ${newOrder.product_name}
-- **Status:** Recorded in Google Sheets **Orders** tab!`,
+- **Status:** Recorded live in Google Sheets **Orders** tab!`,
       timestamp: new Date().toISOString()
     };
   }
 
-  // Product & Pricing Queries
-  if (lastMsg.includes("pixel") || lastMsg.includes("phone")) {
-    const phones = products.filter((p) => p.category?.toLowerCase().includes("phone") || p.name?.toLowerCase().includes("pixel"));
-    const list = phones.length > 0 ? phones : products.slice(0, 5);
-    const responseText = `### Available Phones\n` + list.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}\n  *Specs:* ${p.description || "N/A"}`).join("\n\n");
+  // 4. Product & Pricing Queries (Smart Dynamic Filtering for query terms like "dell mouse", "laptop", "phone")
+  const isProductQuery = /price|cost|product|catalog|stock|item|spec|mouse|keyboard|laptop|phone|headphone|tablet|dell|apple|sony|samsung|pixel|macbook|logitech|razer/i.test(lastMsg);
+  if (isProductQuery) {
+    const stopWords = new Set(["tell", "me", "prices", "price", "cost", "of", "the", "is", "a", "an", "for", "i", "want", "show", "what", "are", "have", "you"]);
+    const keywords = lastMsg.split(/\s+/).map((w) => w.replace(/[^a-z0-9]/gi, "").toLowerCase()).filter((w) => w.length > 1 && !stopWords.has(w));
+
+    let matching = products;
+    if (keywords.length > 0) {
+      matching = products.filter((p) => {
+        const fullText = `${p.name} ${p.category} ${p.description}`.toLowerCase();
+        return keywords.some((k) => fullText.includes(k));
+      });
+    }
+
+    if (matching.length === 0) matching = products.slice(0, 5);
+
+    const titleStr = keywords.length > 0 ? `Products matching "${keywords.join(" ")}"` : "Products Catalog";
+    const responseText = `### 🛒 ${titleStr}\n` + matching.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}\n  *Category:* ${p.category} | *Specs:* ${p.description || "N/A"}`).join("\n\n");
+
     return { text: responseText, timestamp: new Date().toISOString() };
   }
 
-  if (lastMsg.includes("laptop") || lastMsg.includes("macbook") || lastMsg.includes("dell")) {
-    const laptops = products.filter((p) => p.category?.toLowerCase().includes("laptop") || p.name?.toLowerCase().includes("dell") || p.name?.toLowerCase().includes("macbook"));
-    const list = laptops.length > 0 ? laptops : products.slice(0, 5);
-    const responseText = `### Laptops Catalog\n` + list.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}\n  *Specs:* ${p.description || "N/A"}`).join("\n\n");
-    return { text: responseText, timestamp: new Date().toISOString() };
+  // 5. Order Lookup by ID
+  const orderIdMatch = lastMsg.match(/ORD-\d{3,4}/i);
+  if (orderIdMatch) {
+    const orderId = orderIdMatch[0].toUpperCase();
+    const order = await getOrderById(orderId);
+    if (order) {
+      return {
+        text: `### 📦 Order Details (\`${order.order_id}\`)
+- **Customer:** ${order.customer_name} (${order.customer_email})
+- **Product:** ${order.product_name}
+- **Total Price:** $${order.total_price}
+- **Purchase Date:** ${order.order_date}
+- **Status:** **${order.status}**`,
+        timestamp: new Date().toISOString()
+      };
+    }
   }
 
-  if (lastMsg.includes("product") || lastMsg.includes("price")) {
-    const list = products.length > 0 ? products.slice(0, 10) : [];
-    const responseText = `### Products Catalog (Google Sheets)\n` + list.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}`).join("\n");
-    return { text: responseText, timestamp: new Date().toISOString() };
-  }
-
-  // Return & Refund Policy
-  if (lastMsg.includes("policy") || lastMsg.includes("return") || lastMsg.includes("refund")) {
+  // 6. Policy Questions
+  if (/policy|return policy|refund policy|rules/i.test(lastMsg)) {
     return {
-      text: `### Company Return & Refund Policy
-- **Electronics Return Window:** Items such as laptops, phones, tablets, and watches have a **15-day return policy** from the date of purchase.
-- **Condition:** Items must be unused and in original packaging.
-- **Processing Time:** Approved refunds are processed within 5 business days.`,
+      text: `### 📋 Company Return & Refund Policy
+- **Electronics Return Window:** 15 days from purchase date.
+- **Standard Items:** 30 days from purchase date.
+- **Condition:** Must be unused and in original packaging.
+- **Refund Payouts:** Approved refunds are processed within 5 business days upon receiving bank details.`,
       timestamp: new Date().toISOString()
     };
   }
