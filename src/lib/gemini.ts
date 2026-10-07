@@ -116,17 +116,24 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string) {
   const isReturnRefund = /return|refund|money back|cancel|exchange/i.test(lowerMsg);
 
   // Check for Order Placement Intent ONLY if NOT return/refund
-  const isOrderCreation = !isReturnRefund && (/buy|purchase|place order|want to order|confirm purchase/i.test(lowerMsg) ||
-    /finalize your order|confirm if you would like to proceed/i.test(aiText));
+  const isOrderCreation = !isReturnRefund && (
+    /place.*order|i want to buy|want to buy|i want (a|the)?\s*(dell|pixel|phone|laptop|mouse|keyboard|tablet|macbook|iphone|samsung|sony|airpods|ipad)|buy|purchase|confirm order/i.test(lowerMsg) ||
+    /finalize your order|confirm if you would like to proceed/i.test(aiText)
+  );
 
   if (isOrderCreation) {
-    let productName = "electronics";
-    if (lowerMsg.includes("pixel") || lowerMsg.includes("phone")) productName = "phone";
-    else if (lowerMsg.includes("macbook") || lowerMsg.includes("laptop") || lowerMsg.includes("dell")) productName = "laptop";
-    else if (lowerMsg.includes("headphone") || lowerMsg.includes("sony")) productName = "headphones";
-    else if (lowerMsg.includes("mouse")) productName = "mouse";
-    else if (lowerMsg.includes("keyboard")) productName = "keyboard";
-    else if (lowerMsg.includes("tablet") || lowerMsg.includes("ipad")) productName = "tablet";
+    let productName = "laptop";
+    if (lowerMsg.includes("pixel") || lowerMsg.includes("google pixel")) productName = "Google Pixel 9 Pro";
+    else if (lowerMsg.includes("iphone")) productName = "Apple iPhone 16 Pro Max";
+    else if (lowerMsg.includes("samsung")) productName = "Samsung Galaxy S25 Ultra";
+    else if (lowerMsg.includes("phone")) productName = "Phone";
+    else if (lowerMsg.includes("macbook")) productName = "Apple MacBook Air M3";
+    else if (lowerMsg.includes("dell")) productName = "Dell XPS 15 9530";
+    else if (lowerMsg.includes("laptop")) productName = "Laptop";
+    else if (lowerMsg.includes("mouse")) productName = "Logitech MX Master 3S Mouse";
+    else if (lowerMsg.includes("keyboard")) productName = "Logitech MX Keys S Keyboard";
+    else if (lowerMsg.includes("headphone") || lowerMsg.includes("sony")) productName = "Sony WH-1000XM5 Headphones";
+    else if (lowerMsg.includes("tablet") || lowerMsg.includes("ipad")) productName = "Apple iPad Pro M4";
 
     const nameMatch = lowerMsg.match(/i am ([a-z]+)/i);
     const customerName = nameMatch ? nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1) : "Customer";
@@ -250,7 +257,6 @@ Electronics have a strict **15-day return limit**. ${evalResult.reason}`,
       }
     }
 
-    // Extract customer name if mentioned (e.g. "i am abis want to return my order")
     const nameMatch = lastMsg.match(/i am ([a-z]+)/i);
     const customerName = nameMatch ? nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1) : "";
 
@@ -263,16 +269,21 @@ Please reply with your **Order ID** (for example: \`ORD-101\` or \`ORD-105\`) so
     };
   }
 
-  // 3. Explicit Order Placement Intent (buy / purchase / place order)
-  const isOrderPlacement = /buy|purchase|place order|want to order|confirm purchase/i.test(lastMsg);
+  // 3. Explicit Order Placement Intent (e.g. "place my order of Phone Google Pixel 9 Pro", "i want dell mouse", "buy laptop")
+  const isOrderPlacement = /place.*order|i want to buy|want to buy|i want (a|the)?\s*(dell|pixel|phone|laptop|mouse|keyboard|tablet|macbook|iphone|samsung|sony|airpods|ipad)|buy|purchase|confirm order/i.test(lastMsg);
   if (isOrderPlacement) {
     let productName = "laptop";
-    if (lastMsg.includes("pixel") || lastMsg.includes("phone") || lastMsg.includes("iphone") || lastMsg.includes("samsung")) productName = "phone";
-    else if (lastMsg.includes("macbook") || lastMsg.includes("dell") || lastMsg.includes("laptop") || lastMsg.includes("hp") || lastMsg.includes("lenovo")) productName = "laptop";
-    else if (lastMsg.includes("headphone") || lastMsg.includes("sony") || lastMsg.includes("airpods") || lastMsg.includes("bose")) productName = "headphones";
-    else if (lastMsg.includes("mouse") || lastMsg.includes("logitech") || lastMsg.includes("razer")) productName = "mouse";
-    else if (lastMsg.includes("keyboard")) productName = "keyboard";
-    else if (lastMsg.includes("tablet") || lastMsg.includes("ipad")) productName = "tablet";
+    if (lastMsg.includes("pixel") || lastMsg.includes("google pixel")) productName = "Google Pixel 9 Pro";
+    else if (lastMsg.includes("iphone")) productName = "Apple iPhone 16 Pro Max";
+    else if (lastMsg.includes("samsung")) productName = "Samsung Galaxy S25 Ultra";
+    else if (lastMsg.includes("phone")) productName = "Phone";
+    else if (lastMsg.includes("macbook")) productName = "Apple MacBook Air M3";
+    else if (lastMsg.includes("dell")) productName = "Dell XPS 15 9530";
+    else if (lastMsg.includes("laptop")) productName = "Laptop";
+    else if (lastMsg.includes("mouse")) productName = "Logitech MX Master 3S Mouse";
+    else if (lastMsg.includes("keyboard")) productName = "Logitech MX Keys S Keyboard";
+    else if (lastMsg.includes("headphone") || lastMsg.includes("sony")) productName = "Sony WH-1000XM5 Headphones";
+    else if (lastMsg.includes("tablet") || lastMsg.includes("ipad")) productName = "Apple iPad Pro M4";
 
     const nameMatch = lastMsg.match(/i am ([a-z]+)/i);
     const customerName = nameMatch ? nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1) : "Customer";
@@ -283,7 +294,7 @@ Please reply with your **Order ID** (for example: \`ORD-101\` or \`ORD-105\`) so
       text: `### 🎉 Order Placed Successfully!
 Your order for **${productName}** has been confirmed and placed into our system.
 
-**Order Summary:**
+**Order Details:**
 - **Order ID:** \`${newOrder.order_id}\`
 - **Customer:** ${newOrder.customer_name}
 - **Item:** ${newOrder.product_name}
@@ -292,18 +303,29 @@ Your order for **${productName}** has been confirmed and placed into our system.
     };
   }
 
-  // 4. Product & Pricing Queries (Smart Dynamic Filtering for query terms like "dell mouse", "laptop", "phone")
+  // 4. Product & Pricing Queries (Smart Dynamic Filtering for queries like "tell me prices of dell mouse")
   const isProductQuery = /price|cost|product|catalog|stock|item|spec|mouse|keyboard|laptop|phone|headphone|tablet|dell|apple|sony|samsung|pixel|macbook|logitech|razer/i.test(lastMsg);
   if (isProductQuery) {
-    const stopWords = new Set(["tell", "me", "prices", "price", "cost", "of", "the", "is", "a", "an", "for", "i", "want", "show", "what", "are", "have", "you"]);
-    const keywords = lastMsg.split(/\s+/).map((w) => w.replace(/[^a-z0-9]/gi, "").toLowerCase()).filter((w) => w.length > 1 && !stopWords.has(w));
+    const stopWords = new Set(["hi", "hello", "hey", "tell", "me", "prices", "price", "cost", "of", "the", "is", "a", "an", "for", "i", "want", "show", "what", "are", "have", "you", "please", "and"]);
+    const keywords = lastMsg.split(/[\s,]+/).map((w) => w.replace(/[^a-z0-9]/gi, "").toLowerCase()).filter((w) => w.length > 1 && !stopWords.has(w));
 
     let matching = products;
     if (keywords.length > 0) {
+      // Step A: try products matching ALL keywords
       matching = products.filter((p) => {
         const fullText = `${p.name} ${p.category} ${p.description}`.toLowerCase();
-        return keywords.some((k) => fullText.includes(k));
+        return keywords.every((k) => fullText.includes(k));
       });
+
+      // Step B: if no match for ALL keywords, try category or keyword matches
+      if (matching.length === 0) {
+        matching = products.filter((p) => {
+          const categoryLower = (p.category || "").toLowerCase();
+          const nameLower = (p.name || "").toLowerCase();
+          const descLower = (p.description || "").toLowerCase();
+          return keywords.some((k) => categoryLower.includes(k) || nameLower.includes(k) || descLower.includes(k));
+        });
+      }
     }
 
     if (matching.length === 0) matching = products.slice(0, 5);
