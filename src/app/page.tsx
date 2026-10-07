@@ -192,9 +192,7 @@ export default function EcommerceAgentApp() {
       {/* Sleek Light Header */}
       <header className="sticky top-0 z-30 glass-nav px-4 lg:px-8 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center shadow-md shadow-indigo-200">
-            <Bot className="w-6 h-6 text-white" />
-          </div>
+          <img src="/logo.png" alt="Mind_Dream AI Logo" className="w-10 h-10 rounded-xl object-cover border border-slate-300 shadow-md" />
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="font-bold text-slate-900 text-lg tracking-tight">Mind_Dream AI</h1>
@@ -230,7 +228,7 @@ export default function EcommerceAgentApp() {
                 : "text-slate-600 hover:text-slate-900 hover:bg-white/40"
             }`}
           >
-            <Bot className="w-4 h-4" />
+            <img src="/logo.png" alt="" className="w-4 h-4 rounded-full object-cover" />
             AI Chatbot (Mind_Dream AI)
           </button>
 
@@ -275,14 +273,12 @@ export default function EcommerceAgentApp() {
         {activeTab === "chat" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
             {/* Main Chat Box */}
-            <div className="lg:col-span-2 glass-panel rounded-2xl flex flex-col h-[650px] overflow-hidden">
+            <div className="lg:col-span-2 glass-panel rounded-2xl flex flex-col h-[390px] overflow-hidden">
               {/* Chat Header */}
               <div className="px-6 py-4 border-b border-slate-200/80 bg-white/60 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="relative">
-                    <div className="w-9 h-9 rounded-full bg-indigo-100 border border-indigo-300 flex items-center justify-center">
-                      <Bot className="w-5 h-5 text-indigo-600" />
-                    </div>
+                    <img src="/logo.png" alt="Mind_Dream AI" className="w-9 h-9 rounded-full object-cover border border-slate-300 shadow-xs" />
                     <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
                   </div>
                   <div>
@@ -304,15 +300,13 @@ export default function EcommerceAgentApp() {
                     key={msg.id}
                     className={`flex items-start gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
                   >
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
-                        msg.role === "user"
-                          ? "bg-slate-800 text-white"
-                          : "bg-indigo-600 text-white shadow-xs"
-                      }`}
-                    >
-                      {msg.role === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                    </div>
+                    {msg.role === "user" ? (
+                      <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center shrink-0 text-xs font-bold">
+                        <User className="w-4 h-4" />
+                      </div>
+                    ) : (
+                      <img src="/logo.png" alt="Mind_Dream AI" className="w-8 h-8 rounded-full object-cover border border-slate-300 shrink-0 shadow-xs" />
+                    )}
 
                     <div
                       className={`max-w-[82%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
@@ -335,9 +329,7 @@ export default function EcommerceAgentApp() {
 
                 {isTyping && (
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
-                      <Bot className="w-4 h-4 animate-bounce" />
-                    </div>
+                    <img src="/logo.png" alt="Mind_Dream AI" className="w-8 h-8 rounded-full object-cover border border-slate-300 shrink-0 animate-pulse" />
                     <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 text-xs text-slate-500 flex items-center gap-2">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
                       Mind_Dream AI is consulting policy & Google Sheets...
