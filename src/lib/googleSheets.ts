@@ -14,172 +14,13 @@ export interface BankDetails {
   mobile_number: string;
 }
 
-// Initial Products Dataset
-const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: "PROD-101",
-    name: "Wireless Noise-Canceling Headphones",
-    category: "Audio",
-    price: 199.99,
-    stock: 45,
-    rating: 4.8,
-    discount: "15% OFF",
-    description: "Premium over-ear noise-canceling headphones with 30h battery life and HD audio clarity."
-  },
-  {
-    id: "PROD-102",
-    name: "UltraBook Pro 15 Laptop",
-    category: "Laptops",
-    price: 1299.00,
-    stock: 12,
-    rating: 4.7,
-    discount: "10% OFF",
-    description: "Sleek 15-inch aluminum laptop with M3 chipset, 16GB RAM, 512GB SSD."
-  },
-  {
-    id: "PROD-103",
-    name: "Smart Fitness Watch",
-    category: "Wearables",
-    price: 149.50,
-    stock: 30,
-    rating: 4.5,
-    discount: "5% OFF",
-    description: "AMOLED fitness tracker with heart-rate monitoring, GPS, and 7-day battery."
-  },
-  {
-    id: "PROD-104",
-    name: "Mechanical RGB Gaming Keyboard",
-    category: "Accessories",
-    price: 89.99,
-    stock: 85,
-    rating: 4.9,
-    discount: "0%",
-    description: "Tactile mechanical keyboard with customizable RGB backlighting and hot-swappable switches."
-  },
-  {
-    id: "PROD-105",
-    name: "Ergonomic Wireless Mouse",
-    category: "Accessories",
-    price: 49.99,
-    stock: 120,
-    rating: 4.6,
-    discount: "10% OFF",
-    description: "Precision optical wireless mouse designed for comfort and extended productivity."
-  },
-  {
-    id: "PROD-106",
-    name: "4K Ultra HD 27-inch Monitor",
-    category: "Displays",
-    price: 349.00,
-    stock: 18,
-    rating: 4.7,
-    discount: "20% OFF",
-    description: "IPS panel 4K UHD monitor with HDR400, USB-C 65W charging, and ultra-thin bezels."
-  },
-  {
-    id: "PROD-107",
-    name: "Dell XPS 15 Intel i7 Laptop",
-    category: "Laptops",
-    price: 1399.99,
-    stock: 8,
-    rating: 4.8,
-    discount: "8% OFF",
-    description: "Dell XPS 15 High Performance Laptop with Intel Core i7, 16GB RAM, 1TB SSD, 4K Display."
-  },
-  {
-    id: "PROD-108",
-    name: "Dell Inspiron 14 Touchscreen Laptop",
-    category: "Laptops",
-    price: 749.00,
-    stock: 15,
-    rating: 4.6,
-    discount: "5% OFF",
-    description: "Dell Inspiron 14 2-in-1 Touchscreen Laptop with AMD Ryzen 7, 16GB RAM, 512GB SSD."
-  }
-];
-
-// Initial Customer Orders Dataset (including Zulqarnain, Junaid, and Abdul Rehman)
-const INITIAL_ORDERS: Order[] = [
-  {
-    order_id: "ORD-9026",
-    customer_name: "Zulqarnain",
-    customer_email: "zulqarnain@example.com",
-    product_id: "PROD-107",
-    product_name: "Dell XPS 15 Intel i7 Laptop",
-    quantity: 1,
-    total_price: 1399.99,
-    order_date: "2026-09-28", // Purchased 5 days ago (Within 15-day electronics return window -> Eligible)
-    status: "Delivered",
-    is_electronics: true
-  },
-  {
-    order_id: "ORD-9027",
-    customer_name: "Junaid",
-    customer_email: "junaid@example.com",
-    product_id: "PROD-101",
-    product_name: "Wireless Noise-Canceling Headphones",
-    quantity: 1,
-    total_price: 169.99,
-    order_date: "2026-09-01", // Purchased >30 days ago (Expired 15-day window -> Ineligible)
-    status: "Delivered",
-    is_electronics: true
-  },
-  {
-    order_id: "ORD-9028",
-    customer_name: "Abdul Rehman",
-    customer_email: "abdul.rehman@example.com",
-    product_id: "PROD-105",
-    product_name: "Ergonomic Wireless Mouse",
-    quantity: 2,
-    total_price: 89.98,
-    order_date: "2026-09-20", // Purchased 13 days ago (Within 30-day standard return window -> Eligible)
-    status: "Delivered",
-    is_electronics: false
-  },
-  {
-    order_id: "ORD-9021",
-    customer_name: "Sarah Jenkins",
-    customer_email: "sarah.j@example.com",
-    product_id: "PROD-101",
-    product_name: "Wireless Noise-Canceling Headphones",
-    quantity: 1,
-    total_price: 169.99,
-    order_date: "2026-09-28",
-    status: "Delivered",
-    is_electronics: true
-  },
-  {
-    order_id: "ORD-9022",
-    customer_name: "Michael Chen",
-    customer_email: "m.chen@example.com",
-    product_id: "PROD-102",
-    product_name: "UltraBook Pro 15 Laptop",
-    quantity: 1,
-    total_price: 1169.10,
-    order_date: "2026-09-01",
-    status: "Delivered",
-    is_electronics: true
-  }
-];
-
-const INITIAL_LOGS: InteractionLog[] = [
-  {
-    log_id: "LOG-1001",
-    timestamp: new Date("2026-10-02T14:32:00Z").toISOString(),
-    customer_email: "zulqarnain@example.com",
-    order_id: "ORD-9026",
-    action_type: "Order Inquiry",
-    status: "Completed",
-    details: "Checked order details for Dell XPS 15 Laptop."
-  }
-];
-
-let memoryProducts = [...INITIAL_PRODUCTS];
-let memoryOrders = [...INITIAL_ORDERS];
-let memoryLogs = [...INITIAL_LOGS];
+// Memory cache initialized empty - all data is fetched in real-time from Google Sheets
+let memoryProducts: Product[] = [];
+let memoryOrders: Order[] = [];
+let memoryLogs: InteractionLog[] = [];
 let memoryBankDetails: BankDetails[] = [];
 
-export const SHEET_ID = process.env.GOOGLE_SHEETS_ID || "1zTUpdY8ufxg6aPTV-5WLDrkyxughn7NP";
+export const SHEET_ID = "1JeGY2xGqj-GQABEZlPrfvso8L9ukQLGgPgPqsFUfOuA";
 
 function getSheetsClient() {
   try {
@@ -190,6 +31,8 @@ function getSheetsClient() {
         scopes: ["https://www.googleapis.com/auth/spreadsheets"]
       });
       return google.sheets({ version: "v4", auth });
+    } else {
+      console.warn("credentials.json not found at:", credPath);
     }
 
     const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
@@ -213,26 +56,70 @@ export async function fetchProducts(): Promise<Product[]> {
   const sheets = getSheetsClient();
   if (!sheets) return memoryProducts;
 
+  const activeSheetId = SHEET_ID;
+
   try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: "Products!A2:H50"
-    });
+    let res;
+    try {
+      res = await sheets.spreadsheets.values.get({
+        spreadsheetId: activeSheetId,
+        range: "products!A2:Z100"
+      });
+    } catch {
+      res = await sheets.spreadsheets.values.get({
+        spreadsheetId: activeSheetId,
+        range: "Products!A2:Z100"
+      });
+    }
 
     const rows = res.data.values;
     if (!rows || rows.length === 0) return memoryProducts;
 
-    return rows.map((row) => ({
-      id: row[0] || "",
-      name: row[1] || "",
-      category: row[2] || "",
-      price: parseFloat(row[3]) || 0,
-      stock: parseInt(row[4], 10) || 0,
-      rating: parseFloat(row[5]) || 0,
-      discount: row[6] || "0%",
-      description: row[7] || ""
-    }));
-  } catch (error) {
+    const fetchedProducts = rows
+      .filter((row) => row && row.length > 0 && row[0])
+      .map((row, index) => {
+        // Handle 7-column layout (Category, Brand, Model Name, Key Specifications, Best For, price, stock)
+        if (row.length <= 7 || isNaN(parseFloat(row[0]))) {
+          const category = row[0] || "General";
+          const brand = row[1] || "";
+          const modelName = row[2] || "";
+          const fullName = brand && !modelName.toLowerCase().includes(brand.toLowerCase())
+            ? `${brand} ${modelName}`
+            : modelName || `${category} #${index + 1}`;
+          const specs = row[3] || "";
+          const bestFor = row[4] || "";
+          const price = parseFloat(row[5]) || 0;
+          const stock = parseInt(row[6], 10) || 0;
+
+          return {
+            id: `PROD-${101 + index}`,
+            name: fullName,
+            category: category,
+            price: price,
+            stock: stock,
+            rating: 4.8,
+            discount: "0%",
+            description: `${specs}${bestFor ? ` (Best for: ${bestFor})` : ""}`
+          };
+        }
+
+        // Standard 8-column layout (ID, Name, Category, Price, Stock, Rating, Discount, Description)
+        return {
+          id: row[0] || `PROD-${101 + index}`,
+          name: row[1] || "",
+          category: row[2] || "",
+          price: parseFloat(row[3]) || 0,
+          stock: parseInt(row[4], 10) || 0,
+          rating: parseFloat(row[5]) || 4.8,
+          discount: row[6] || "0%",
+          description: row[7] || ""
+        };
+      });
+
+    memoryProducts = fetchedProducts;
+    return fetchedProducts;
+  } catch (error: any) {
+    console.error("Google Sheets API error in fetchProducts:", error?.message || error);
     return memoryProducts;
   }
 }
@@ -241,28 +128,68 @@ export async function fetchOrders(): Promise<Order[]> {
   const sheets = getSheetsClient();
   if (!sheets) return memoryOrders;
 
+  const activeSheetId = process.env.GOOGLE_SHEETS_ID || SHEET_ID;
+
   try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: "Orders!A2:K50"
-    });
+    let res;
+    try {
+      res = await sheets.spreadsheets.values.get({
+        spreadsheetId: activeSheetId,
+        range: "Orders!A2:Z100"
+      });
+    } catch {
+      res = await sheets.spreadsheets.values.get({
+        spreadsheetId: activeSheetId,
+        range: "orders!A2:Z100"
+      });
+    }
 
     const rows = res.data.values;
     if (!rows || rows.length === 0) return memoryOrders;
 
-    return rows.map((row) => ({
-      order_id: row[0] || "",
-      customer_name: row[1] || "",
-      customer_email: row[2] || "",
-      product_id: row[3] || "",
-      product_name: row[4] || "",
-      quantity: parseInt(row[5], 10) || 1,
-      total_price: parseFloat(row[6]) || 0,
-      order_date: row[7] || "",
-      status: (row[8] as Order["status"]) || "Delivered",
-      is_electronics: row[9]?.toLowerCase() === "true"
-    }));
-  } catch (error) {
+    const fetchedOrders = rows
+      .filter((row) => row && row.length > 0 && row[0])
+      .map((row) => {
+        // Check if user's 5-6 column format (order_id, customer, product, category, days_ago, Refund Status)
+        if (row.length <= 6 || (row[4] && !isNaN(parseInt(row[4], 10)) && row[4].length <= 3)) {
+          const daysAgo = parseInt(row[4], 10) || 0;
+          const d = new Date();
+          d.setDate(d.getDate() - daysAgo);
+          const orderDateStr = d.toISOString().split("T")[0];
+
+          return {
+            order_id: row[0] || "",
+            customer_name: row[1] || "Customer",
+            customer_email: `${(row[1] || "customer").toLowerCase().replace(/\s+/g, ".")}@example.com`,
+            product_id: `PROD-${row[0]}`,
+            product_name: row[2] || "Product",
+            quantity: 1,
+            total_price: row[3]?.toLowerCase().includes("electr") ? 499.99 : 99.99,
+            order_date: orderDateStr,
+            status: (row[5] as Order["status"]) || "Delivered",
+            is_electronics: row[3]?.toLowerCase().includes("electr") || false
+          };
+        }
+
+        // Standard 10-column format
+        return {
+          order_id: row[0] || "",
+          customer_name: row[1] || "",
+          customer_email: row[2] || "",
+          product_id: row[3] || "",
+          product_name: row[4] || "",
+          quantity: parseInt(row[5], 10) || 1,
+          total_price: parseFloat(row[6]) || 0,
+          order_date: row[7] || "",
+          status: (row[8] as Order["status"]) || "Delivered",
+          is_electronics: row[9]?.toLowerCase() === "true"
+        };
+      });
+
+    memoryOrders = fetchedOrders;
+    return fetchedOrders;
+  } catch (error: any) {
+    console.error("Google Sheets API error in fetchOrders:", error?.message || error);
     return memoryOrders;
   }
 }
@@ -403,4 +330,66 @@ export async function fetchLogs(): Promise<InteractionLog[]> {
   } catch {
     return memoryLogs;
   }
+}
+
+export async function createNewOrder(
+  customerName: string,
+  productName: string,
+  category: string = "electronics"
+): Promise<Order> {
+  const existingOrders = await fetchOrders();
+  let maxNum = 106;
+  existingOrders.forEach((o) => {
+    const num = parseInt(o.order_id.replace(/\D/g, ""), 10);
+    if (!isNaN(num) && num > maxNum) maxNum = num;
+  });
+
+  const newOrderId = `ORD-${maxNum + 1}`;
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const newOrder: Order = {
+    order_id: newOrderId,
+    customer_name: customerName || "Nadeem",
+    customer_email: `${(customerName || "nadeem").toLowerCase().replace(/\s+/g, ".")}@example.com`,
+    product_id: `PROD-${newOrderId}`,
+    product_name: productName,
+    quantity: 1,
+    total_price: category.toLowerCase().includes("electr") ? 499.99 : 99.99,
+    order_date: todayStr,
+    status: "Delivered",
+    is_electronics: true
+  };
+
+  memoryOrders.push(newOrder);
+
+  const sheets = getSheetsClient();
+  if (sheets) {
+    const activeSheetId = process.env.GOOGLE_SHEETS_ID || SHEET_ID;
+    try {
+      let targetRange = "Orders!A:F";
+      try {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: activeSheetId,
+          range: "Orders!A:F",
+          valueInputOption: "USER_ENTERED",
+          requestBody: {
+            values: [[newOrderId, customerName || "Nadeem", productName, category, "0", "Delivered"]]
+          }
+        });
+      } catch {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: activeSheetId,
+          range: "orders!A:F",
+          valueInputOption: "USER_ENTERED",
+          requestBody: {
+            values: [[newOrderId, customerName || "Nadeem", productName, category, "0", "Delivered"]]
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to append order to Google Sheets:", err);
+    }
+  }
+
+  return newOrder;
 }
