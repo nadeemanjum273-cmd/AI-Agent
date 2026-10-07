@@ -42,7 +42,7 @@ export default function EcommerceAgentApp() {
       {
         id: "welcome-1",
         role: "model",
-        content: "Hello! I am NAdeem Techmart Agent. How can I help you today?",
+        content: "Hello! I am Mind_Dream AI. How can I help you today?",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       }
     ]);
@@ -197,7 +197,7 @@ export default function EcommerceAgentApp() {
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="font-bold text-slate-900 text-lg tracking-tight">Nadeem Techmart AI</h1>
+              <h1 className="font-bold text-slate-900 text-lg tracking-tight">Mind_Dream AI</h1>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-soft-pulse"></span>
                 Next.js + Google Sheets Live
@@ -231,7 +231,7 @@ export default function EcommerceAgentApp() {
             }`}
           >
             <Bot className="w-4 h-4" />
-            AI Chatbot (Nadeem Techmart AI)
+            AI Chatbot (Mind_Dream AI)
           </button>
 
           <button
@@ -286,7 +286,7 @@ export default function EcommerceAgentApp() {
                     <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
                   </div>
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-900">Nadeem Techmart AI</h2>
+                    <h2 className="text-sm font-semibold text-slate-900">Mind_Dream AI</h2>
                     <p className="text-[11px] text-slate-500">Grounded with Company Policy & Google Sheets Live Sync</p>
                   </div>
                 </div>
@@ -340,7 +340,7 @@ export default function EcommerceAgentApp() {
                     </div>
                     <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 text-xs text-slate-500 flex items-center gap-2">
                       <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-                      Nadeem Techmart AI is consulting policy & Google Sheets...
+                      Mind_Dream AI is consulting policy & Google Sheets...
                     </div>
                   </div>
                 )}
@@ -359,7 +359,7 @@ export default function EcommerceAgentApp() {
                   type="text"
                   value={inputQuery}
                   onChange={(e) => setInputQuery(e.target.value)}
-                  placeholder="Ask Nadeem Techmart AI about products, place an order, or submit an order ID for refund..."
+                  placeholder="Ask Mind_Dream AI about products, place an order, or submit an order ID for refund..."
                   className="flex-1 px-4 py-2.5 text-xs text-slate-900 bg-slate-100/80 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
                 />
                 <button
@@ -635,7 +635,7 @@ export default function EcommerceAgentApp() {
                   <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
                   Google Sheets Interaction Logs (`Bank_Details` Tab)
                 </h2>
-                <p className="text-xs text-slate-500">Automated interaction ledger updated whenever Nadeem Techmart AI handles an inquiry</p>
+                <p className="text-xs text-slate-500">Automated interaction ledger updated whenever Mind_Dream AI handles an inquiry</p>
               </div>
             </div>
 
@@ -736,7 +736,7 @@ export default function EcommerceAgentApp() {
 
       {/* Sleek Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 px-6 text-center text-xs text-slate-500">
-        TechMart AI Support Agent &copy; 2026 | Next.js Capstone Project | Vercel & GitHub Ready
+        Mind_Dream AI Support Agent &copy; 2026 | Next.js Capstone Project | Vercel & GitHub Ready
       </footer>
     </div>
   );

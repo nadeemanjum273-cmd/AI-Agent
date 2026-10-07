@@ -12,23 +12,23 @@ export async function processAgentConversation(messages: ChatMessage[]) {
   const apiKey = process.env.GEMINI_API_KEY || "";
   const lastUserMsg = messages[messages.length - 1]?.content.trim().toLowerCase() || "";
 
-  // RULE 1: GREETING BEHAVIOR FOR NADEEM TECHMART AI
+  // RULE 1: GREETING BEHAVIOR FOR MIND_DREAM AI
   if (isPureGreeting(lastUserMsg)) {
     return {
-      text: "Hello! I am Nadeem Techmart AI. How can I help you today?",
+      text: "Hello! I am Mind_Dream AI. How can I help you today?",
       timestamp: new Date().toISOString()
     };
   }
 
-  // SYSTEM INSTRUCTION FOR NADEEM TECHMART AI
+  // SYSTEM INSTRUCTION FOR MIND_DREAM AI
   const systemInstruction = `
-You are Nadeem Techmart AI, an AI Customer & Sales Support Agent at "TechMart".
+You are Mind_Dream AI, an AI Customer & Sales Support Agent.
 Your goal is to provide concise, accurate, and direct assistance based strictly on company databases, Google Sheets, and policy documents.
 
 STRICT OPERATIONAL RULES:
 
 1. GREETINGS & INITIAL RESPONSE:
-   - If the user greets (e.g. "Hi", "Hello"), reply ONLY with: "Hello! I am Nadeem Techmart AI. How can I help you today?"
+   - If the user greets (e.g. "Hi", "Hello"), reply ONLY with: "Hello! I am Mind_Dream AI. How can I help you today?"
 
 2. ORDER PLACEMENT WORKFLOW:
    - When a customer wants to buy, purchase, or place an order for any item (e.g., "I want to buy Google Pixel 9 Pro" or "confirm purchase" or "place order"), confirm their purchase and inform them that their order has been placed and added directly to the Google Sheets Orders tab.
@@ -74,13 +74,13 @@ ${orderSummary}
 --- USER CONVERSATION HISTORY ---
 ${messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")}
 
-Respond strictly adhering to Nadeem Techmart AI rules.
+Respond strictly adhering to Mind_Dream AI rules.
 `;
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.0-flash",
       contents: fullPrompt,
       config: {
         systemInstruction,
@@ -88,7 +88,7 @@ Respond strictly adhering to Nadeem Techmart AI rules.
       }
     });
 
-    const aiAnswer = response.text || "Hello! I am Nadeem Techmart AI. How can I help you today?";
+    const aiAnswer = response.text || "Hello! I am Mind_Dream AI. How can I help you today?";
 
     // Execute side-effect actions (Order creation, Refund lookup, Bank Details capture, Sheet update)
     await handleAgentActions(messages, aiAnswer);
@@ -123,7 +123,7 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string) {
     else if (lastUserMsg.toLowerCase().includes("headphone") || lastUserMsg.toLowerCase().includes("sony")) productName = "headphones";
     else if (lastUserMsg.toLowerCase().includes("tablet") || lastUserMsg.toLowerCase().includes("ipad")) productName = "tablet";
 
-    await createNewOrder("Nadeem", productName, "electronics");
+    await createNewOrder("Customer", productName, "electronics");
   }
 
   // Check for Order ID / Refund Intent
@@ -175,7 +175,7 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string) {
 }
 
 /**
- * Deterministic Rule-Based Fallback logic for NAdeem Techmart Agent
+ * Deterministic Rule-Based Fallback logic for Mind_Dream AI
  */
 async function fallbackAgentReasoning(
   messages: ChatMessage[],
@@ -187,7 +187,7 @@ async function fallbackAgentReasoning(
   // Rule 1: Greeting
   if (isPureGreeting(lastMsg)) {
     return {
-      text: "Hello! I am Nadeem Techmart AI. How can I help you today?",
+      text: "Hello! I am Mind_Dream AI. How can I help you today?",
       timestamp: new Date().toISOString()
     };
   }
@@ -200,7 +200,7 @@ async function fallbackAgentReasoning(
     else if (lastMsg.includes("headphone") || lastMsg.includes("sony")) productName = "headphones";
     else if (lastMsg.includes("tablet") || lastMsg.includes("ipad")) productName = "tablet";
 
-    const newOrder = await createNewOrder("Nadeem", productName, "electronics");
+    const newOrder = await createNewOrder("Customer", productName, "electronics");
 
     return {
       text: `### 🎉 Order Placed Successfully!
@@ -217,22 +217,22 @@ Your order for **${productName}** has been confirmed and placed into our system.
 
   // Product & Pricing Queries
   if (lastMsg.includes("pixel") || lastMsg.includes("phone")) {
-    const phones = products.filter((p) => p.category.toLowerCase().includes("phone") || p.name.toLowerCase().includes("pixel"));
-    const responseText = `### Available Phones
-` + phones.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}\n  *Specs:* ${p.description}`).join("\n\n");
+    const phones = products.filter((p) => p.category?.toLowerCase().includes("phone") || p.name?.toLowerCase().includes("pixel"));
+    const list = phones.length > 0 ? phones : products.slice(0, 5);
+    const responseText = `### Available Phones\n` + list.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}\n  *Specs:* ${p.description || "N/A"}`).join("\n\n");
     return { text: responseText, timestamp: new Date().toISOString() };
   }
 
   if (lastMsg.includes("laptop") || lastMsg.includes("macbook") || lastMsg.includes("dell")) {
-    const laptops = products.filter((p) => p.category.toLowerCase().includes("laptop") || p.name.toLowerCase().includes("dell") || p.name.toLowerCase().includes("macbook"));
-    const responseText = `### Laptops Catalog
-` + laptops.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}\n  *Specs:* ${p.description}`).join("\n\n");
+    const laptops = products.filter((p) => p.category?.toLowerCase().includes("laptop") || p.name?.toLowerCase().includes("dell") || p.name?.toLowerCase().includes("macbook"));
+    const list = laptops.length > 0 ? laptops : products.slice(0, 5);
+    const responseText = `### Laptops Catalog\n` + list.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}\n  *Specs:* ${p.description || "N/A"}`).join("\n\n");
     return { text: responseText, timestamp: new Date().toISOString() };
   }
 
   if (lastMsg.includes("product") || lastMsg.includes("price")) {
-    const responseText = `### Products Catalog (Google Sheets)
-` + products.slice(0, 10).map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}`).join("\n");
+    const list = products.length > 0 ? products.slice(0, 10) : [];
+    const responseText = `### Products Catalog (Google Sheets)\n` + list.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}`).join("\n");
     return { text: responseText, timestamp: new Date().toISOString() };
   }
 
@@ -248,7 +248,7 @@ Your order for **${productName}** has been confirmed and placed into our system.
   }
 
   return {
-    text: "Hello! I am Nadeem Techmart AI. How can I help you today?",
+    text: "Hello! I am Mind_Dream AI. How can I help you today?",
     timestamp: new Date().toISOString()
   };
 }

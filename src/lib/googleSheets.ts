@@ -22,6 +22,9 @@ let memoryBankDetails: BankDetails[] = [];
 
 export const SHEET_ID = "1JeGY2xGqj-GQABEZlPrfvso8L9ukQLGgPgPqsFUfOuA";
 
+const DEFAULT_CLIENT_EMAIL = "nadeemanjum@kinetic-highway-510207-a3.iam.gserviceaccount.com";
+const DEFAULT_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC3sufqelEBKaOh\n8NYdTd2s7fT9YRI4ECj6RFuyAwy6aa+BWuYIUNot4u1Mig7ArrVuA3vyqlY46pLm\nPDuzrq5V/N+3f6NH2b4UnpSRWq3SOB230Trq0PjJJu30n4DGHDuCRpaoxrkgfxax\n9UXe5DV8VAz/zOJqDEcpsqbhKfmzWWPWugUqSJIjQWxftZi9N9HDiHtKoLCiT0VI\nF5K7dtA1Dco7WMfsZElVvj4vqmKzEGQLF2KdB/XhfVJaVlDXlmun2Gp/y7UDfqKP\ncFEkcV4rLNtTvUpGNt0cFqIl3ld4HS9Is9NhFd37bzbLwTOSoPCOgUbHFNe5uPHV\nAN8RI/CnAgMBAAECggEAI8TRRaXlif1qoEi92FzmEhsPfhrdqk7zO6/9zs6rNs0H\nYH+rlOjxYsfx/tpO/xPFvhMtmlWyjkiWrAAEe/tCdPnVMezHhWEPkwJB2X+3otxM\nZRN3jmt8VeafpOc98tVifP5zrY9sUriMWcBxh3IWPAw9r71cRNv5K1RfDC7ZMSOd\nSk7ZqPC2icqG5XcVfwQ+AOISli/CTY88IWzgMXoxCw9JvYKslgiCiHAl9AfAGBkq\nAWO44tav2B8Kt5+tM6yfuH7aIk/pOqdGCWWHUXwac1NuC4MNsJpDdWlDe2x1enB6\n2lsxL23atKHhlwExGywAuXp8SU8M1ECQibuLYtIgIQKBgQDZxfmqp9WEqqwo3RvQ\n7yGDaSRJQPJq5rGryKTE5CKURGQK/BBz4HiW200XPJnOxRZQ0u0j0U6UHOM39hiB\n1sUkIFybFclHot+hrGlJWOK7ZbXIgCqBEBoxk4TaBrKzICwPovksc1v1mluKH4mU\nf24Muy/uxgQrP/bb3yZXqt8vsQKBgQDX8bvrsjUdROJdaMMq2ENsUmfRLXFbZHq4\nMrwODLlaER2GGNtvQVyR3CVku/FXFlWsDdJKs2srgakIJIT4Coz2ns2gfOLXFpXh\nwjI1LFLVvPEJqOGfRT0wGpmWb8b6KsPcH/sOtmBz1ZmjYv+g6c99OSTQEvkUPuk1\njPjwbqTT1wKBgDknbE8NnUwkPuq6nQJIwFLs1Ukkcnr78MVU82l5NloTWO5JGUhQ\nMVXmWGUw0m0h7KlpsjMkS6szqa6WN/hblYHVvHg3T4wtguO7jCZj3Z2xI/RrLryQ\nrU81mDhgaaX5W5b+/sZbwFbFHCE0Bbejeg59UicocQ+oyfEKr9VyUwEBAoGBAM/R\nnXecPo+Xfn5E1ybBkEmMGMtvf1tkHNJuSRsAVdT/CbnG7E9qyMq64eXLFd0o6nQ1\nrP8lImtxUho7AxivFrA1blEYPzqeSspEmQshR+rY9ePE+rXL7bIAt3TWx9h0FaAf\nyv6Ct9piY4ShPsA+o+eweeQhjkJUtR1LOTwyT0BrAoGBAIuM1VHFURAxD0GkUuUk\npdqK3cwSoHGNBLFGLmLORYLOddAqs3ToPjqe7IpetIxMAECwNDk/649Hnf9eUfd0\niMLmjeePCyasoaw1cAjvJFtUKNrIGKINRnwfRD+gZWDNIxXJgU8CaymWhyJXd5UW\nc/faQvZuU6YKtKXB3SI/sRkf\n-----END PRIVATE KEY-----\n`;
+
 function getSheetsClient() {
   try {
     const credPath = path.join(process.cwd(), "credentials.json");
@@ -31,21 +34,18 @@ function getSheetsClient() {
         scopes: ["https://www.googleapis.com/auth/spreadsheets"]
       });
       return google.sheets({ version: "v4", auth });
-    } else {
-      console.warn("credentials.json not found at:", credPath);
     }
 
-    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-    const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL || DEFAULT_CLIENT_EMAIL;
+    const rawKey = process.env.GOOGLE_PRIVATE_KEY || DEFAULT_PRIVATE_KEY;
+    const privateKey = rawKey.replace(/\\n/g, "\n");
 
-    if (clientEmail && privateKey) {
-      const auth = new google.auth.JWT({
-        email: clientEmail,
-        key: privateKey,
-        scopes: ["https://www.googleapis.com/auth/spreadsheets"]
-      });
-      return google.sheets({ version: "v4", auth });
-    }
+    const auth = new google.auth.JWT({
+      email: clientEmail,
+      key: privateKey,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+    });
+    return google.sheets({ version: "v4", auth });
   } catch (e) {
     console.warn("Auth client creation warning:", e);
   }
