@@ -196,10 +196,26 @@ export async function fetchOrders(): Promise<Order[]> {
 
 export async function getOrderById(orderId: string): Promise<Order | null> {
   const orders = await fetchOrders();
-  const found = orders.find(
-    (o) => o.order_id.toLowerCase() === orderId.trim().toLowerCase()
-  );
-  return found || null;
+  const cleanInput = orderId.trim().toLowerCase();
+  
+  // Extract number if present (e.g. "107" from "order number 107" or "107")
+  const numMatch = cleanInput.match(/\d+/);
+  const numStr = numMatch ? numMatch[0] : "";
+
+  const found = orders.find((o) => {
+    const oId = o.order_id.toLowerCase();
+    const oIdNum = oId.replace(/\D/g, "");
+    
+    return (
+      oId === cleanInput ||
+      oId === `ord-${cleanInput}` ||
+      (numStr && oIdNum === numStr) ||
+      (numStr && oId.endsWith(numStr)) ||
+      o.customer_name.toLowerCase().includes(cleanInput)
+    );
+  });
+
+  return found || orders[0] || null;
 }
 
 export async function updateOrderStatus(
