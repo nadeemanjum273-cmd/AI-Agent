@@ -72,6 +72,58 @@ export function extractUserBankInfo(text: string) {
   return { bankName, accountNumber, mobileNumber };
 }
 
+export function extractCustomerName(text: string): string {
+  const patterns = [
+    /(?:my name is|name is|name:|customer:)s*([a-zA-Z]+)/i,
+    /(?:i am|iam|i ma|ima|this is)s+([a-zA-Z]+)/i,
+    /^([a-zA-Z]+)s+(?:here|want|wants|placing|places|would like)/i
+  ];
+
+  for (const p of patterns) {
+    const match = text.match(p);
+    if (match && match[1]) {
+      const candidate = match[1].trim();
+      const forbidden = ["phone", "laptop", "order", "buy", "please", "product", "want", "place", "new", "ma", "am", "here", "the", "an", "a"];
+      if (!forbidden.includes(candidate.toLowerCase()) && candidate.length >= 2) {
+        return candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
+      }
+    }
+  }
+
+  const beforeOrderMatch = text.match(/([a-zA-Z]+)s*(?:want to place|wants to place|place my|place an|place order)/i);
+  if (beforeOrderMatch && beforeOrderMatch[1]) {
+    const candidate = beforeOrderMatch[1].trim();
+    const forbidden = ["i", "ma", "am", "please", "to", "and", "just", "now", "order"];
+    if (!forbidden.includes(candidate.toLowerCase()) && candidate.length >= 2) {
+      return candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
+    }
+  }
+
+  return "";
+}
+
+function findMatchingProduct(userText: string, products: any[]) {
+  const lower = userText.toLowerCase();
+
+  // Try matching exact product name or brand+model
+  for (const p of products) {
+    const nameLow = p.name.toLowerCase();
+    if (lower.includes(nameLow)) return p;
+  }
+
+  // Try matching individual distinct keywords
+  const keywords = lower.split(/\s+/).filter((w) => w.length >= 4 && !["phone", "laptop", "order", "place", "want", "please", "this", "that", "with"].includes(w));
+
+  for (const p of products) {
+    const fullText = `${p.name} ${p.category} ${p.description}`.toLowerCase();
+    if (keywords.some((k) => fullText.includes(k))) {
+      return p;
+    }
+  }
+
+  return null;
+}
+
 export async function processAgentConversation(messages: ChatMessage[]) {
   const apiKey = process.env.GEMINI_API_KEY || "";
   const lastUserMsg = messages[messages.length - 1]?.content.trim() || "";
@@ -84,6 +136,8 @@ export async function processAgentConversation(messages: ChatMessage[]) {
     };
   }
 
+  const [products, orders] = await Promise.all([fetchProducts(), fetchOrders()]);
+
   const systemInstruction = `
 You are Mind_Dream AI, an AI Customer & Sales Support Agent.
 Your goal is to provide concise, accurate, and direct assistance based strictly on company databases, Google Sheets, and policy documents.
@@ -94,20 +148,17 @@ STRICT OPERATIONAL RULES:
    - If the user ONLY greets (e.g. "Hi", "Hello"), reply ONLY with: "Hello! I am Mind_Dream AI. How can I assist you today?"
 
 2. PRODUCT & PRICING QUERIES (Tab 1: Products List):
-   - When asked for product prices, specs, models, or recommendations (e.g., "tell me laptop dell", "price of Samsung S25"), query the Products List sheet (Tab 1) and return exact specs, stock, and price.
+   - When asked for product prices, specs, models, or recommendations, query Tab 1 and return exact specs, stock, and price.
 
 3. NEW ORDER PLACEMENT (Tab 2: Orders):
-   - When a user asks to buy or place an order for a product (e.g., "please place my new order : Phone Apple iPhone 16 Pro Max , my name is Zulqi"), check product availability in Tab 1 (Products List), insert a NEW order row into Tab 2 (Orders), and respond with clear confirmation containing Order ID, Customer Name, Product, and Status.
+   - ALWAYS verify stock in Tab 1 (Products List) before confirming an order!
+   - If stock is 0 (Out of Stock), reject the order and inform the user that the product is Out of Stock.
+   - If stock > 0, extract the customer's actual provided name (e.g. "Zuli" or "Zulqi") and exact product name/category from Tab 1, insert a NEW row into Tab 2 (Orders), and respond with clear confirmation.
 
-4. REFUND & RETURN WORKFLOW (Tab 2: Order Details & Tab 3: Bank & Customer Details):
-   - STEP 1: Identify Order ID (e.g. ORD-106, 106, order number 106) and Customer Name.
-   - STEP 2: Check purchase date/days_ago against return policy limit (<= 15 days).
-   - STEP 3: If eligible, update the exact row of that order in Tab 2 under column Refund Status (Col F) to "Return Approved".
-   - STEP 4: Request Bank Name, Account Number, and Mobile Number from customer. DO NOT populate Tab 3 until ALL THREE essential details (Bank Name, Account Number, Mobile Number) are provided by the customer.
-   - STEP 5: When bank details are provided, extract the correct order_id, customer name, and product name from Tab 2. Insert a NEW row into Tab 3 containing ONLY the user's actual provided data mapped strictly to columns: Order ID (Col A), Customer (Col B), Product (Col C), Bank_Name (Col D), Account Number (Col E), Mobile Number (Col F). NEVER use dummy/test values!
+4. REFUND & RETURN WORKFLOW (Tab 2 & Tab 3):
+   - Check days_ago <= 15 days in Tab 2. Update Column F to "Return Approved".
+   - When bank details (Bank Name, Account Number, Mobile Number) are provided, insert a NEW row into Tab 3 with exact user bank data + matching Tab 2 order metadata.
 `;
-
-  const [products, orders] = await Promise.all([fetchProducts(), fetchOrders()]);
 
   const productSummary = products
     .map(
@@ -151,7 +202,10 @@ Respond strictly adhering to Mind_Dream AI rules.
 
     const aiAnswer = response.text || "";
 
-    await handleAgentActions(messages, aiAnswer, products);
+    const actionResult = await handleAgentActions(messages, aiAnswer, products);
+    if (actionResult && actionResult.text) {
+      return actionResult;
+    }
 
     if (aiAnswer.trim()) {
       return {
@@ -192,18 +246,7 @@ function extractOrderId(text: string): string | null {
   return null;
 }
 
-function extractCustomerName(text: string): string {
-  const nameMatch = text.match(/(?:my name is|name is|i am|customer[:\s]+)\s*([a-zA-Z]+)/i);
-  if (nameMatch && nameMatch[1]) {
-    const n = nameMatch[1].trim();
-    if (!/phone|laptop|order|buy|please|product/i.test(n)) {
-      return n.charAt(0).toUpperCase() + n.slice(1);
-    }
-  }
-  return "";
-}
-
-async function handleAgentActions(messages: ChatMessage[], aiText: string, products: any[]) {
+async function handleAgentActions(messages: ChatMessage[], aiText: string, products: any[]): Promise<{ text: string; timestamp: string } | null> {
   const userMessages = messages.filter((m) => m.role === "user");
   const lastUserMsg = userMessages[userMessages.length - 1]?.content || "";
   const userFullText = userMessages.map((m) => m.content).join(" ");
@@ -218,22 +261,22 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string, produ
   );
 
   if (isOrderCreation) {
-    let customerName = extractCustomerName(lastUserMsg) || extractCustomerName(userFullText) || "Customer";
-    
-    // Find matching product from Tab 1
-    let matchedProduct = products.find((p) => {
-      const nameLow = p.name.toLowerCase();
-      return lowerMsg.split(/\s+/).some((term) => term.length > 3 && nameLow.includes(term));
-    });
+    const customerName = extractCustomerName(lastUserMsg) || extractCustomerName(userFullText) || "Customer";
+    const matched = findMatchingProduct(lastUserMsg, products);
 
-    let productName = matchedProduct ? matchedProduct.name : "Apple iPhone 16 Pro Max";
-    let category = matchedProduct ? matchedProduct.category : "Electronics";
+    if (matched && matched.stock <= 0) {
+      return {
+        text: `### ⚠️ Product Out of Stock!
 
-    if (lowerMsg.includes("iphone")) productName = "Apple iPhone 16 Pro Max";
-    else if (lowerMsg.includes("pixel")) productName = "Google Pixel 9 Pro";
-    else if (lowerMsg.includes("samsung")) productName = "Samsung Galaxy S25 Ultra";
-    else if (lowerMsg.includes("dell")) productName = "Dell XPS 15 9530";
-    else if (lowerMsg.includes("macbook")) productName = "Apple MacBook Air M3";
+Hello **${customerName}**! The item **${matched.name}** is currently **Out of Stock** (Stock: 0) in our inventory (Tab 1: Products List).
+
+We cannot place an order for out-of-stock items. Please select an available product from Tab 1!`,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    const productName = matched ? matched.name : "Apple iPhone 16 Pro Max";
+    const category = matched ? matched.category : "Electronics";
 
     await createNewOrder(customerName, productName, category);
   }
@@ -257,7 +300,6 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string, produ
     }
   }
 
-  // Extract bank details ONLY from user messages
   const { bankName, accountNumber, mobileNumber } = extractUserBankInfo(userFullText);
   const isComplete = Boolean(bankName && accountNumber && mobileNumber);
 
@@ -276,6 +318,8 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string, produ
       mobile_number: mobileNumber
     });
   }
+
+  return null;
 }
 
 /**
@@ -298,7 +342,7 @@ async function fallbackAgentReasoning(
     };
   }
 
-  const customerName = extractCustomerName(lastUserMsg) || extractCustomerName(userFullText) || "";
+  const customerName = extractCustomerName(lastUserMsg) || extractCustomerName(userFullText) || "Customer";
 
   // 1. ORDER CREATION / PLACEMENT
   const isReturnRefund = /return|retrun|retun|refund|refrun|money back|cancel|exchange/i.test(lowerMsg);
@@ -309,22 +353,31 @@ async function fallbackAgentReasoning(
   );
 
   if (isOrderPlacement) {
-    let matchedProduct = products.find((p) => {
-      const nameLow = p.name.toLowerCase();
-      return lowerMsg.split(/\s+/).some((term) => term.length > 3 && nameLow.includes(term));
-    });
+    const matched = findMatchingProduct(lastUserMsg, products);
 
-    let productName = matchedProduct ? matchedProduct.name : "Apple iPhone 16 Pro Max";
-    let category = matchedProduct ? matchedProduct.category : "Electronics";
+    if (matched && matched.stock <= 0) {
+      return {
+        text: `### ⚠️ Product Out of Stock!
 
-    if (lowerMsg.includes("iphone") || lowerMsg.includes("apple")) productName = "Apple iPhone 16 Pro Max";
-    else if (lowerMsg.includes("pixel")) productName = "Google Pixel 9 Pro";
-    else if (lowerMsg.includes("samsung")) productName = "Samsung Galaxy S25 Ultra";
-    else if (lowerMsg.includes("dell")) productName = "Dell XPS 15 9530";
-    else if (lowerMsg.includes("macbook")) productName = "Apple MacBook Air M3";
+Hello **${customerName}**! The item **${matched.name}** is currently **Out of Stock** (Stock: 0) in our inventory (Tab 1: Products List).
 
-    const nameToUse = customerName || "Customer";
-    const newOrder = await createNewOrder(nameToUse, productName, category);
+We cannot place an order for out-of-stock items. Please select an available product from Tab 1!`,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    let productName = matched ? matched.name : "Apple iPhone 16 Pro Max";
+    let category = matched ? matched.category : "Electronics";
+
+    if (!matched) {
+      if (lowerMsg.includes("iphone") || lowerMsg.includes("apple")) { productName = "Apple iPhone 16 Pro Max"; category = "Phone"; }
+      else if (lowerMsg.includes("samsung") || lowerMsg.includes("s25")) { productName = "Samsung Galaxy S25 Ultra"; category = "Phone"; }
+      else if (lowerMsg.includes("pixel")) { productName = "Google Pixel 9 Pro"; category = "Phone"; }
+      else if (lowerMsg.includes("dell")) { productName = "Dell XPS 15 9530"; category = "Laptop"; }
+      else if (lowerMsg.includes("macbook")) { productName = "Apple MacBook Air M3"; category = "Laptop"; }
+    }
+
+    const newOrder = await createNewOrder(customerName, productName, category);
 
     return {
       text: `### 🎉 Order Placed Successfully!
@@ -349,7 +402,7 @@ Your order for **${productName}** has been confirmed and placed in **Tab 2 (Orde
     if (extractedId) {
       const order = await getOrderById(extractedId);
       if (order) {
-        const displayName = customerName || order.customer_name || "Customer";
+        const displayName = customerName !== "Customer" ? customerName : order.customer_name || "Customer";
         const evalResult = evaluateRefundEligibility(order.order_date, order.is_electronics);
 
         if (evalResult.eligible) {
@@ -396,15 +449,15 @@ Electronics have a strict **15-day return policy**. ${evalResult.reason}`,
     }
 
     return {
-      text: `### 🔄 Return & Refund Request${customerName ? ` for ${customerName}` : ""}
-Hello ${customerName ? customerName : "there"}! I would be glad to help you process your return.
+      text: `### 🔄 Return & Refund Request${customerName !== "Customer" ? ` for ${customerName}` : ""}
+Hello ${customerName !== "Customer" ? customerName : "there"}! I would be glad to help you process your return.
 
 Please reply with your **Order ID** (for example: "ORD-106" or "106") so I can locate your purchase in Tab 2 (**Order Details**) and evaluate your return eligibility.`,
       timestamp: new Date().toISOString()
     };
   }
 
-  // 3. BANK DETAILS SUBMISSION (Only evaluated strictly from USER inputs)
+  // 3. BANK DETAILS SUBMISSION
   const userBankDetails = extractUserBankInfo(userFullText);
   const hasBankMention = /bank|account|acc|meezan|hbl|ubl|mcb|chase|bofa|wells|allied|alfalah|faysal|askari|citi/i.test(lowerMsg) ||
     Boolean(userBankDetails.bankName || userBankDetails.accountNumber);
@@ -416,7 +469,7 @@ Please reply with your **Order ID** (for example: "ORD-106" or "106") so I can l
     const extractedId = extractOrderId(userFullText) || "ORD-106";
     const order = await getOrderById(extractedId);
 
-    const displayName = order?.customer_name || customerName || "Customer";
+    const displayName = order?.customer_name || (customerName !== "Customer" ? customerName : "Customer");
     const productName = order?.product_name || "Product";
 
     if (isComplete) {
@@ -488,7 +541,7 @@ Please reply with the missing essential detail(s) so we can insert your complete
     if (matching.length === 0) matching = products.slice(0, 5);
 
     const titleStr = keywords.length > 0 ? `Products Matching "${keywords.join(" ")}"` : "Products List";
-    const responseText = `### 🛒 ${titleStr} (Tab 1: Products List)\n` + matching.map((p) => `- **${p.name}** ("${p.id}"): **$${p.price}** | Stock: ${p.stock}\n  *Category:* ${p.category} | *Specs:* ${p.description || "N/A"}`).join("\n\n");
+    const responseText = `### 🛒 ${titleStr} (Tab 1: Products List)\n` + matching.map((p) => `- **${p.name}** ("${p.id}"): **$${p.price}** | Stock: ${p.stock} ${p.stock <= 0 ? "❌ (Out of Stock)" : "✅ (In Stock)"}\n  *Category:* ${p.category} | *Specs:* ${p.description || "N/A"}`).join("\n\n");
 
     return { text: responseText, timestamp: new Date().toISOString() };
   }
@@ -522,7 +575,7 @@ Please reply with the missing essential detail(s) so we can insert your complete
   }
 
   return {
-    text: `Hello${customerName ? ` **${customerName}**` : ""}! I am **Mind_Dream AI**. How can I assist you today?
+    text: `Hello${customerName !== "Customer" ? ` **${customerName}**` : ""}! I am **Mind_Dream AI**. How can I assist you today?
 
 - 🛒 **Inquire Products:** Ask about laptops (*Dell, Apple, HP*), phones (*Samsung, Pixel*), specs & prices (Tab 1).
 - 📦 **Place New Order:** Say "please place my new order: Phone Apple iPhone 16 Pro Max, my name is Zulqi" (Tab 2).
