@@ -236,14 +236,26 @@ export async function updateOrderStatus(
     const index = orders.findIndex((o) => o.order_id.toLowerCase() === orderId.toLowerCase());
     if (index !== -1) {
       const rowIndex = index + 2;
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SHEET_ID,
-        range: `Orders!I${rowIndex}`,
-        valueInputOption: "USER_ENTERED",
-        requestBody: {
-          values: [[newStatus]]
-        }
-      });
+      const activeSheetId = process.env.GOOGLE_SHEETS_ID || SHEET_ID;
+      try {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: activeSheetId,
+          range: `Orders!F${rowIndex}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: {
+            values: [[newStatus]]
+          }
+        });
+      } catch {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: activeSheetId,
+          range: `orders!F${rowIndex}`,
+          valueInputOption: "USER_ENTERED",
+          requestBody: {
+            values: [[newStatus]]
+          }
+        });
+      }
     }
     return true;
   } catch (err) {
@@ -259,12 +271,12 @@ export async function saveBankDetails(data: BankDetails): Promise<boolean> {
   if (sheets) {
     const activeSheetId = process.env.GOOGLE_SHEETS_ID || SHEET_ID;
     const rowValues = [
-      data.order_id || 'ORD-103',
-      data.customer_name || 'Customer',
-      data.product || 'Product',
-      data.bank_name || 'Bank',
-      data.account_number || 'N/A',
-      data.mobile_number || 'N/A'
+      data.order_id || "",
+      data.customer_name || "",
+      data.product || "",
+      data.bank_name || "",
+      data.account_number || "",
+      data.mobile_number || ""
     ];
 
     try {

@@ -8,6 +8,70 @@ export interface ChatMessage {
   content: string;
 }
 
+export function extractUserBankInfo(text: string) {
+  const lower = text.toLowerCase();
+
+  let bankName = "";
+  if (/meezan/i.test(lower)) bankName = "Meezan Bank";
+  else if (/\bhbl\b|habib bank/i.test(lower)) bankName = "HBL";
+  else if (/\bubl\b|united bank/i.test(lower)) bankName = "UBL";
+  else if (/\bmcb\b/i.test(lower)) bankName = "MCB";
+  else if (/chase/i.test(lower)) bankName = "Chase";
+  else if (/bofa|bank of america/i.test(lower)) bankName = "Bank of America";
+  else if (/wells fargo|wells/i.test(lower)) bankName = "Wells Fargo";
+  else if (/allied|\babl\b/i.test(lower)) bankName = "Allied Bank";
+  else if (/alfalah/i.test(lower)) bankName = "Bank Alfalah";
+  else if (/faysal/i.test(lower)) bankName = "Faysal Bank";
+  else if (/askari/i.test(lower)) bankName = "Askari Bank";
+  else if (/citi/i.test(lower)) bankName = "Citibank";
+  else if (/standard chartered|\bscb\b/i.test(lower)) bankName = "Standard Chartered";
+  else {
+    const match = text.match(/(?:bank\s*name|bank\s*is|bank|for)[\s:]*([a-zA-Z\s]{2,25})(?:,|$|\n|account|acc|mobile|phone|\d)/i);
+    if (match && match[1] && match[1].trim().length >= 2) {
+      const extracted = match[1].trim();
+      if (!/account|mobile|phone|number|detail/i.test(extracted)) {
+        bankName = extracted;
+      }
+    }
+  }
+
+  let accountNumber = "";
+  let mobileNumber = "";
+
+  const accMatch = text.match(/(?:account|acc|account\s*number|acc\s*no|a\/c)[\s#:]*([0-9A-Za-z]{6,24})/i);
+  if (accMatch && accMatch[1]) {
+    accountNumber = accMatch[1];
+  }
+
+  const mobMatch = text.match(/(?:mobile|phone|contact|mobile\s*number|phone\s*number|cell)[\s#:]*(\+?\d{7,15})/i);
+  if (mobMatch && mobMatch[1]) {
+    mobileNumber = mobMatch[1];
+  }
+
+  const allNumbers = text.match(/\b\+?\d{6,24}\b/g) || [];
+  for (const num of allNumbers) {
+    const clean = num.replace(/\D/g, "");
+    if (clean.length < 5) continue;
+
+    const isMobileFormat = (clean.startsWith("03") || clean.startsWith("3") || clean.startsWith("92")) && clean.length >= 10 && clean.length <= 13;
+
+    if (isMobileFormat && !mobileNumber) {
+      mobileNumber = num;
+    } else if (!accountNumber && num !== mobileNumber) {
+      accountNumber = num;
+    }
+  }
+
+  if (!accountNumber && allNumbers.length > 0 && allNumbers[0] !== mobileNumber) {
+    accountNumber = allNumbers[0] || "";
+  }
+  if (!mobileNumber && allNumbers.length > 1 && allNumbers[1] !== accountNumber) {
+    mobileNumber = allNumbers[1] || "";
+  }
+
+  return { bankName, accountNumber, mobileNumber };
+}
+
 export async function processAgentConversation(messages: ChatMessage[]) {
   const apiKey = process.env.GEMINI_API_KEY || "";
   const lastUserMsg = messages[messages.length - 1]?.content.trim() || "";
@@ -34,10 +98,10 @@ STRICT OPERATIONAL RULES:
 
 3. REFUND & RETURN WORKFLOW (Tab 2: Order Details & Tab 3: Bank & Customer Details):
    - STEP 1: Identify Order ID (e.g. ORD-107, 107, order number 107) and Customer Name.
-   - STEP 2: Electronics have a 15-day return policy; standard items have 30 days.
-   - STEP 3: Calculate purchase date vs current date. If within policy limit (< 15 days), declare Eligible and update status in Tab 2 to "Return Approved".
+   - STEP 2: Check purchase date/days_ago against return policy limit (<= 15 days).
+   - STEP 3: If eligible, update the exact row of that order in Tab 2 under column Refund Status (Col F) to "Return Approved".
    - STEP 4: Request Bank Name, Account Number, and Mobile Number from customer. DO NOT populate Tab 3 until ALL THREE essential details (Bank Name, Account Number, Mobile Number) are provided by the customer.
-   - STEP 5: Once all 3 essential details are provided, populate them into Tab 3 (Bank & Customer Details) following Row 2 pattern: Order ID, Customer Name, Product, Bank Name, Account Number, Mobile Number.
+   - STEP 5: Insert a NEW row into Tab 3 containing ONLY the user's actual provided data mapped strictly to columns: Order ID (Col A), Customer (Col B), Product (Col C), Bank_Name (Col D), Account Number (Col E), Mobile Number (Col F). NEVER use dummy/test values!
 `;
 
   const [products, orders] = await Promise.all([fetchProducts(), fetchOrders()]);
@@ -183,60 +247,22 @@ async function handleAgentActions(messages: ChatMessage[], aiText: string) {
     }
   }
 
-  const fullText = messages.map((m) => m.content).join(" ") + " " + lastUserMsg;
-  const lowerFull = fullText.toLowerCase();
+  const { bankName, accountNumber, mobileNumber } = extractUserBankInfo(fullConversation);
+  const isComplete = Boolean(bankName && accountNumber && mobileNumber);
 
-  let bankName: string = "";
-  if (/meezan/i.test(lowerFull)) bankName = "Meezan Bank";
-  else if (/hbl|habib bank/i.test(lowerFull)) bankName = "HBL Bank";
-  else if (/ubl|united bank/i.test(lowerFull)) bankName = "UBL Bank";
-  else if (/mcb/i.test(lowerFull)) bankName = "MCB Bank";
-  else if (/chase/i.test(lowerFull)) bankName = "Chase Bank";
-  else if (/bofa|bank of america/i.test(lowerFull)) bankName = "Bank of America";
-  else if (/wells/i.test(lowerFull)) bankName = "Wells Fargo";
-  else if (/allied|abl/i.test(lowerFull)) bankName = "Allied Bank";
-  else if (/alfalah/i.test(lowerFull)) bankName = "Bank Alfalah";
-  else if (/faysal/i.test(lowerFull)) bankName = "Faysal Bank";
-  else if (/askari/i.test(lowerFull)) bankName = "Askari Bank";
-  else if (/citi/i.test(lowerFull)) bankName = "Citibank";
-  else {
-    const customBank = lastUserMsg.match(/(?:bank name|bank)[\s:]*([a-zA-Z\s]+?)(?:,|$|\n|account|acc|mobile|phone)/i);
-    if (customBank && customBank[1] && (customBank[1] || "").trim().length > 2) {
-      const b = (customBank[1] || "").trim();
-      bankName = b.toLowerCase().includes("bank") ? b : (b + " Bank");
-    } else if (/\bbank\b/i.test(lowerMsg)) {
-      bankName = "Bank";
-    }
-  }
-
-  const numbers = fullText.match(/\b\d{6,16}\b/g) || [];
-  let accountNumber: string | null = null;
-  let mobileNumber: string | null = null;
-
-  for (const num of numbers) {
-    if ((num.startsWith("3") || num.startsWith("03") || num.length === 10 || num.length === 11) && !mobileNumber) {
-      mobileNumber = num;
-    } else if (!accountNumber) {
-      accountNumber = num;
-    }
-  }
-  if (!accountNumber && numbers.length > 0) accountNumber = numbers[0] || null;
-  if (!mobileNumber && numbers.length > 1) mobileNumber = numbers[1] || null;
-
-  const isComplete = Boolean(bankName.length > 0 && accountNumber && mobileNumber);
   if (isComplete) {
-    const targetOrderId = orderId || "ORD-103";
+    const targetOrderId = orderId || "ORD-101";
     const order = await getOrderById(targetOrderId);
-    const customerName = order?.customer_name || "John";
-    const productName = order?.product_name || "phone";
+    const customerName = order?.customer_name || "";
+    const productName = order?.product_name || "";
 
     await saveBankDetails({
       order_id: targetOrderId,
       customer_name: customerName,
       product: productName,
-      bank_name: bankName || "Bank",
-      account_number: accountNumber || "N/A",
-      mobile_number: mobileNumber || "N/A"
+      bank_name: bankName,
+      account_number: accountNumber,
+      mobile_number: mobileNumber
     });
   }
 }
@@ -269,7 +295,7 @@ async function fallbackAgentReasoning(
     if (extractedId) {
       const order = await getOrderById(extractedId);
       if (order) {
-        const displayName = customerName || order.customer_name || "John";
+        const displayName = customerName || order.customer_name || "Customer";
         const evalResult = evaluateRefundEligibility(order.order_date, order.is_electronics);
 
         if (evalResult.eligible) {
@@ -295,16 +321,16 @@ async function fallbackAgentReasoning(
           return {
             text: `### ✅ Return Approved for Order ${order.order_id}!
 
-Hello **${displayName}**! Your return request for **${order.product_name}** (Order **${order.order_id}**) purchased on **${order.order_date}** (${evalResult.daysElapsed} days ago) is within the 15-day return policy window and has been **APPROVED**.
+Hello **${displayName}**! Your return request for **${order.product_name}** (Order **${order.order_id}**) purchased on **${order.order_date}** (${evalResult.daysElapsed} days ago) is within the return policy window and has been **APPROVED**.
 
-- **Order Status (Tab 2):** Updated live in Google Sheets to "Return Approved".
+- **Order Status (Tab 2):** Updated live in Google Sheets Column F (Refund Status) to "Return Approved".
 
-To complete your refund payout, please reply with your **Bank Details**:
-1. **Bank Name** (e.g. Meezan Bank, HBL Bank, Chase)
-2. **Account Number** (e.g. 9876543210)
-3. **Mobile Phone Number** (e.g. 3009876543)
+To process your refund payout, please reply with your **Bank Details**:
+1. **Bank Name** (e.g. HBL, Meezan Bank, Chase)
+2. **Account Number** (e.g. 1234567898745)
+3. **Mobile Phone Number** (e.g. 030176422273)
 
-*Note: According to store policy, all 3 essential details must be provided to populate Tab 3 (Bank & Customer Details).* `,
+*Note: All 3 essential details (Bank Name, Account Number, Mobile Number) are required to insert your payout record into Tab 3.* `,
             timestamp: new Date().toISOString()
           };
         } else {
@@ -317,7 +343,7 @@ Electronics have a strict **15-day return policy**. ${evalResult.reason}`,
         }
       } else {
         return {
-          text: `Order \`${extractedId}\` was not found in our Google Sheets records. Please check the Order ID and try again.`,
+          text: `Order "${extractedId}" was not found in our Google Sheets records. Please check the Order ID and try again.`,
           timestamp: new Date().toISOString()
         };
       }
@@ -327,7 +353,7 @@ Electronics have a strict **15-day return policy**. ${evalResult.reason}`,
       text: `### 🔄 Return & Refund Request${customerName ? ` for ${customerName}` : ""}
 Hello ${customerName ? customerName : "there"}! I would be glad to help you process your return.
 
-Please reply with your **Order ID** (for example: "ORD-103" or "107") so I can locate your purchase in Tab 2 (**Order Details**) and evaluate your return eligibility.`,
+Please reply with your **Order ID** (for example: "ORD-101" or "101") so I can locate your purchase in Tab 2 (**Order Details**) and evaluate your return eligibility.`,
       timestamp: new Date().toISOString()
     };
   }
@@ -335,71 +361,34 @@ Please reply with your **Order ID** (for example: "ORD-103" or "107") so I can l
   const bankMatch = /(bank|account|acc|mobile|phone|number|meezan|hbl|ubl|mcb|chase|bofa|wells|allied|alfalah|faysal|askari|citi)/i.test(lowerMsg);
   if (bankMatch) {
     const fullText = messages.map((m) => m.content).join(" ") + " " + lastMsg;
-    const lowerFull = fullText.toLowerCase();
+    const { bankName, accountNumber, mobileNumber } = extractUserBankInfo(fullText);
 
-    let bankName: string = "";
-    if (/meezan/i.test(lowerFull)) bankName = "Meezan Bank";
-    else if (/hbl|habib bank/i.test(lowerFull)) bankName = "HBL Bank";
-    else if (/ubl|united bank/i.test(lowerFull)) bankName = "UBL Bank";
-    else if (/mcb/i.test(lowerFull)) bankName = "MCB Bank";
-    else if (/chase/i.test(lowerFull)) bankName = "Chase Bank";
-    else if (/bofa|bank of america/i.test(lowerFull)) bankName = "Bank of America";
-    else if (/wells/i.test(lowerFull)) bankName = "Wells Fargo";
-    else if (/allied|abl/i.test(lowerFull)) bankName = "Allied Bank";
-    else if (/alfalah/i.test(lowerFull)) bankName = "Bank Alfalah";
-    else if (/faysal/i.test(lowerFull)) bankName = "Faysal Bank";
-    else if (/askari/i.test(lowerFull)) bankName = "Askari Bank";
-    else if (/citi/i.test(lowerFull)) bankName = "Citibank";
-    else {
-      const customBank = lastMsg.match(/(?:bank name|bank)[\s:]*([a-zA-Z\s]+?)(?:,|$|\n|account|acc|mobile|phone)/i);
-      if (customBank && customBank[1] && (customBank[1] || "").trim().length > 2) {
-        const b = (customBank[1] || "").trim();
-        bankName = b.toLowerCase().includes("bank") ? b : (b + " Bank");
-      } else if (/\bbank\b/i.test(lowerMsg)) {
-        bankName = "Bank";
-      }
-    }
-
-    const numbers = fullText.match(/\b\d{6,16}\b/g) || [];
-    let accountNumber: string | null = null;
-    let mobileNumber: string | null = null;
-
-    for (const num of numbers) {
-      if ((num.startsWith("3") || num.startsWith("03") || num.length === 10 || num.length === 11) && !mobileNumber) {
-        mobileNumber = num;
-      } else if (!accountNumber) {
-        accountNumber = num;
-      }
-    }
-    if (!accountNumber && numbers.length > 0) accountNumber = numbers[0] || null;
-    if (!mobileNumber && numbers.length > 1) mobileNumber = numbers[1] || null;
-
-    const isComplete = Boolean(bankName.length > 0 && accountNumber && mobileNumber);
-    const extractedId = extractOrderId(fullText) || "ORD-103";
+    const isComplete = Boolean(bankName && accountNumber && mobileNumber);
+    const extractedId = extractOrderId(fullText) || "ORD-101";
     const order = await getOrderById(extractedId);
-    const displayName = customerName || order?.customer_name || "John";
-    const productName = order?.product_name || "phone";
+    const displayName = customerName || order?.customer_name || "Customer";
+    const productName = order?.product_name || "Product";
 
     if (isComplete) {
       await saveBankDetails({
         order_id: extractedId,
         customer_name: displayName,
         product: productName,
-        bank_name: bankName || "Bank",
-        account_number: accountNumber || "N/A",
-        mobile_number: mobileNumber || "N/A"
+        bank_name: bankName,
+        account_number: accountNumber,
+        mobile_number: mobileNumber
       });
 
       return {
         text: `### ✅ Bank Details Recorded in Google Sheets Tab 3!
-Thank you **${displayName}**! Your complete bank payout details for Order **${extractedId}** (${productName}) have been saved to Google Sheets Tab 3 (**Bank & Customer Details**) matching Row 2 pattern:
+Thank you **${displayName}**! Your payout details for Order **${extractedId}** (${productName}) have been inserted into a NEW row in Tab 3 (**Bank & Customer Details**) with your exact provided data:
 
-- **order_id:** \`${extractedId}\`
-- **customer:** \`${displayName}\`
-- **product:** \`${productName}\`
-- **Bank_Name:** \`${bankName}\`
-- **Account Number:** \`${accountNumber}\`
-- **Mobile Number:** \`${mobileNumber}\`
+- **order_id (Col A):** "${extractedId}"
+- **customer (Col B):** "${displayName}"
+- **product (Col C):** "${productName}"
+- **Bank_Name (Col D):** "${bankName}"
+- **Account Number (Col E):** "${accountNumber}"
+- **Mobile Number (Col F):** "${mobileNumber}"
 
 Your refund payout will be processed directly to your bank account within **3-5 business days**!`,
         timestamp: new Date().toISOString()
@@ -411,19 +400,19 @@ Your refund payout will be processed directly to your bank account within **3-5 
 
       return {
         text: `### ⚠️ Essential Bank Details Required
-To record your refund in Tab 3 of Google Sheets, please provide all **3 essential details**:
+To record your refund payout in Tab 3 of Google Sheets, please provide all **3 essential details**:
 
 - 🏦 **Bank Name:** ${bStatus}
 - 🔢 **Account Number:** ${aStatus}
 - 📱 **Mobile Number:** ${mStatus}
 
-Please reply with the missing essential detail(s) so we can save your complete information and process your payout!`,
+Please reply with the missing essential detail(s) so we can insert your complete record into Tab 3!`,
         timestamp: new Date().toISOString()
       };
     }
   }
 
-  const isOrderPlacement = /place.*order|i want to buy|want to buy|i want (a|the)?\\s*(dell|pixel|phone|laptop|mouse|keyboard|tablet|macbook|iphone|samsung|sony|airpods|ipad)|buy|purchase|confirm order/i.test(lowerMsg);
+  const isOrderPlacement = /place.*order|i want to buy|want to buy|i want (a|the)?\s*(dell|pixel|phone|laptop|mouse|keyboard|tablet|macbook|iphone|samsung|sony|airpods|ipad)|buy|purchase|confirm order/i.test(lowerMsg);
   if (isOrderPlacement) {
     let productName = "laptop";
     if (lowerMsg.includes("pixel") || lowerMsg.includes("google pixel")) productName = "Google Pixel 9 Pro";
@@ -438,7 +427,7 @@ Please reply with the missing essential detail(s) so we can save your complete i
     else if (lowerMsg.includes("headphone") || lowerMsg.includes("sony")) productName = "Sony WH-1000XM5 Headphones";
     else if (lowerMsg.includes("tablet") || lowerMsg.includes("ipad")) productName = "Apple iPad Pro M4";
 
-    const displayName = customerName || "John";
+    const displayName = customerName || "Customer";
     const newOrder = await createNewOrder(displayName, productName, "electronics");
 
     return {
@@ -446,7 +435,7 @@ Please reply with the missing essential detail(s) so we can save your complete i
 Your order for **${productName}** has been confirmed.
 
 **Order Details:**
-- **Order ID:** \`${newOrder.order_id}\`
+- **Order ID:** "${newOrder.order_id}"
 - **Customer:** ${newOrder.customer_name}
 - **Item:** ${newOrder.product_name}
 - **Status:** Recorded live in Google Sheets **Order Details** tab!`,
@@ -457,7 +446,7 @@ Your order for **${productName}** has been confirmed.
   const isProductQuery = /price|cost|product|catalog|stock|item|spec|mouse|keyboard|laptop|phone|headphone|tablet|dell|apple|sony|samsung|pixel|macbook|logitech|razer|tell me|show me/i.test(lowerMsg);
   if (isProductQuery) {
     const stopWords = new Set(["hi", "hello", "hey", "tell", "me", "prices", "price", "cost", "of", "the", "is", "a", "an", "for", "i", "want", "show", "what", "are", "have", "you", "please", "and"]);
-    const keywords = lowerMsg.split(/[\\s,]+/).map((w) => w.replace(/[^a-z0-9]/gi, "").toLowerCase()).filter((w) => w.length > 1 && !stopWords.has(w));
+    const keywords = lowerMsg.split(/[\s,]+/).map((w) => w.replace(/[^a-z0-9]/gi, "").toLowerCase()).filter((w) => w.length > 1 && !stopWords.has(w));
 
     let matching = products;
     if (keywords.length > 0) {
@@ -479,7 +468,7 @@ Your order for **${productName}** has been confirmed.
     if (matching.length === 0) matching = products.slice(0, 5);
 
     const titleStr = keywords.length > 0 ? `Products Matching "${keywords.join(" ")}"` : "Products List";
-    const responseText = `### 🛒 ${titleStr} (Tab 1: Products List)\\n` + matching.map((p) => `- **${p.name}** (\`${p.id}\`): **$${p.price}** | Stock: ${p.stock}\\n  *Category:* ${p.category} | *Specs:* ${p.description || "N/A"}`).join("\n\n");
+    const responseText = `### 🛒 ${titleStr} (Tab 1: Products List)\n` + matching.map((p) => `- **${p.name}** ("${p.id}"): **$${p.price}** | Stock: ${p.stock}\n  *Category:* ${p.category} | *Specs:* ${p.description || "N/A"}`).join("\n\n");
 
     return { text: responseText, timestamp: new Date().toISOString() };
   }
@@ -489,7 +478,7 @@ Your order for **${productName}** has been confirmed.
     const order = await getOrderById(extractedId);
     if (order) {
       return {
-        text: `### 📦 Order Details (\`${order.order_id}\`)
+        text: `### 📦 Order Details ("${order.order_id}")
 - **Customer:** ${order.customer_name} (${order.customer_email})
 - **Product:** ${order.product_name}
 - **Total Price:** $${order.total_price}
@@ -506,7 +495,7 @@ Your order for **${productName}** has been confirmed.
 - **Electronics Return Window:** 15 days from purchase date.
 - **Standard Items:** 30 days from purchase date.
 - **Condition:** Must be unused and in original packaging.
-- **Refund Payouts:** Approved refunds update status to "Return Approved" in Tab 2 and populate bank details in Tab 3 upon completing all 3 essential fields!`,
+- **Refund Payouts:** Approved refunds update status to "Return Approved" in Tab 2 and populate bank details into Tab 3 upon completing all 3 essential fields!`,
       timestamp: new Date().toISOString()
     };
   }
@@ -515,7 +504,7 @@ Your order for **${productName}** has been confirmed.
     text: `Hello${customerName ? ` **${customerName}**` : ""}! I am **Mind_Dream AI**. How can I assist you today?
 
 - 🛒 **Inquire Products:** Ask about laptops (*Dell, Apple, HP*), phones (*Samsung, Pixel*), specs & prices (Tab 1).
-- 🔄 **Request Return/Refund:** Provide your Order ID (e.g., \`103\` or "ORD-103") to evaluate 15-day return eligibility (Tab 2).
+- 🔄 **Request Return/Refund:** Provide your Order ID (e.g., "101" or "ORD-101") to evaluate return eligibility (Tab 2).
 - 💳 **Submit Bank Details:** Provide bank name, account number & mobile number for approved refunds (Tab 3).`,
     timestamp: new Date().toISOString()
   };
