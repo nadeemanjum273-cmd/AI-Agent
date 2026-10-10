@@ -217,7 +217,7 @@ export default function EcommerceAgentApp() {
       </header>
 
       {/* Main Container */}
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 flex flex-col gap-6">
+      <div className="flex-1 max-w-[1600px] w-full mx-auto p-4 lg:p-6 flex flex-col gap-6">
         {/* Navigation Tabs */}
         <nav className="flex items-center gap-2 p-1.5 bg-slate-200/60 rounded-xl max-w-fit border border-slate-300/40">
           <button
@@ -271,9 +271,9 @@ export default function EcommerceAgentApp() {
 
         {/* TAB 1: AI CHATBOT INTERFACE */}
         {activeTab === "chat" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1">
             {/* Main Chat Box */}
-            <div className="lg:col-span-2 glass-panel rounded-2xl flex flex-col h-[390px] overflow-hidden">
+            <div className="lg:col-span-3 glass-panel rounded-2xl flex flex-col h-[650px] overflow-hidden">
               {/* Chat Header */}
               <div className="px-6 py-4 border-b border-slate-200/80 bg-white/60 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -309,7 +309,7 @@ export default function EcommerceAgentApp() {
                     )}
 
                     <div
-                      className={`max-w-[82%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
+                      className={`max-w-[92%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
                         msg.role === "user"
                           ? "bg-indigo-600 text-white rounded-tr-none shadow-sm"
                           : "bg-white text-slate-800 border border-slate-200/90 rounded-tl-none shadow-xs"

@@ -7,8 +7,9 @@ export type { Product, Order, InteractionLog };
 export { GOOGLE_SHEET_URL };
 
 export interface BankDetails {
-  customer_email: string;
   order_id: string;
+  customer_name: string;
+  product: string;
   bank_name: string;
   account_number: string;
   mobile_number: string;
@@ -256,26 +257,35 @@ export async function saveBankDetails(data: BankDetails): Promise<boolean> {
 
   const sheets = getSheetsClient();
   if (sheets) {
+    const activeSheetId = process.env.GOOGLE_SHEETS_ID || SHEET_ID;
+    const rowValues = [
+      data.order_id || 'ORD-103',
+      data.customer_name || 'Customer',
+      data.product || 'Product',
+      data.bank_name || 'Bank',
+      data.account_number || 'N/A',
+      data.mobile_number || 'N/A'
+    ];
+
     try {
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
-        range: "Bank_Details!A:E",
-        valueInputOption: "USER_ENTERED",
-        requestBody: {
-          values: [
-            [
-              data.customer_email,
-              data.order_id,
-              data.bank_name,
-              data.account_number,
-              data.mobile_number
-            ]
-          ]
-        }
-      });
+      try {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: activeSheetId,
+          range: 'Bank_Details!A:F',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [rowValues] }
+        });
+      } catch {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: activeSheetId,
+          range: 'Bank_details!A:F',
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [rowValues] }
+        });
+      }
       return true;
     } catch (err) {
-      console.warn("Failed to save bank details to Google Sheets:", err);
+      console.warn('Failed to save bank details to Google Sheets:', err);
     }
   }
   return true;
