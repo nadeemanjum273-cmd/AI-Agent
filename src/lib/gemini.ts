@@ -73,29 +73,38 @@ export function extractUserBankInfo(text: string) {
 }
 
 export function extractCustomerName(text: string): string {
+  const cleanText = text.replace(/[^a-zA-Z0-9\s:]/g, " ");
+
   const patterns = [
-    /(?:my name is|name is|name:|customer:)s*([a-zA-Z]+)/i,
-    /(?:i am|iam|i ma|ima|this is)s+([a-zA-Z]+)/i,
-    /^([a-zA-Z]+)s+(?:here|want|wants|placing|places|would like)/i
+    /(?:my name is|name is|name:|customer:)\s*([a-zA-Z]+)/i,
+    /(?:i am|iam|i ma|ima|this is|its|it's)\s+(?:my name is\s+)?([a-zA-Z]+)/i,
+    /([a-zA-Z]+)\s+(?:here|want|wants|placing|places|would like|plaxced|placed)/i,
+    /([a-zA-Z]+)\s+(?:order|buying|purchasing)/i
   ];
+
+  const forbidden = new Set([
+    "phone", "laptop", "order", "buy", "please", "product", "want", "place", "new",
+    "ma", "am", "here", "the", "an", "a", "of", "to", "and", "just", "now", "its", "it",
+    "is", "my", "name", "for", "with", "headphone", "headphones", "tablet", "mouse", "keyboard"
+  ]);
 
   for (const p of patterns) {
     const match = text.match(p);
     if (match && match[1]) {
       const candidate = match[1].trim();
-      const forbidden = ["phone", "laptop", "order", "buy", "please", "product", "want", "place", "new", "ma", "am", "here", "the", "an", "a", "of"];
-      if (!forbidden.includes(candidate.toLowerCase()) && candidate.length >= 2) {
+      if (!forbidden.has(candidate.toLowerCase()) && candidate.length >= 2) {
         return candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
       }
     }
   }
 
-  const beforeOrderMatch = text.match(/([a-zA-Z]+)s*(?:want to place|wants to place|place my|place an|place order)/i);
-  if (beforeOrderMatch && beforeOrderMatch[1]) {
-    const candidate = beforeOrderMatch[1].trim();
-    const forbidden = ["i", "ma", "am", "please", "to", "and", "just", "now", "order", "of"];
-    if (!forbidden.includes(candidate.toLowerCase()) && candidate.length >= 2) {
-      return candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
+  const words = cleanText.split(/\s+/);
+  for (let i = words.length - 1; i >= 0; i--) {
+    const w = words[i].trim();
+    if (w.length >= 3 && !forbidden.has(w.toLowerCase())) {
+      if (/^[A-Z][a-z]+$/.test(w) || (i > 0 && /name|is|am|ma/i.test(words[i - 1]))) {
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      }
     }
   }
 
@@ -119,12 +128,10 @@ function findMatchingProduct(userText: string, products: any[]) {
 
     let score = 0;
 
-    // Exact full product name match
     if (lower.includes(pNameLow)) {
       score += 100;
     }
 
-    // Match keywords against name, category, desc
     for (const word of userWords) {
       if (pNameLow.includes(word)) {
         score += 15;
@@ -158,7 +165,6 @@ export async function processAgentConversation(messages: ChatMessage[]) {
 
   const [products, orders] = await Promise.all([fetchProducts(), fetchOrders()]);
 
-  // Handle agent actions directly
   const actionResult = await handleAgentActions(messages, products, orders);
   if (actionResult && actionResult.text) {
     return actionResult;
@@ -177,9 +183,8 @@ STRICT OPERATIONAL RULES:
    - When asked for product prices, specs, models, or recommendations, query Tab 1 and return exact specs, stock, and price.
 
 3. NEW ORDER PLACEMENT (Tab 2: Orders):
-   - ALWAYS verify stock in Tab 1 (Products List) before confirming an order!
-   - If stock is 0 (Out of Stock), reject the order and inform the user that the product is Out of Stock.
-   - If stock > 0, extract the customer's actual provided name (e.g. "Zuli" or "Zulqi") and exact product name/category from Tab 1, insert a NEW row into Tab 2 (Orders), and respond with clear confirmation.
+   - CUSTOMER NAME IS COMPULSORY! If the user does not provide their name when placing an order, DO NOT create an order and DO NOT write "Customer" to Tab 2. Reply requesting their name first.
+   - ALWAYS verify stock in Tab 1 (Products List) before confirming an order! If stock is 0 (Out of Stock), reject the order.
 
 4. REFUND & RETURN WORKFLOW (Tab 2 & Tab 3):
    - Check days_ago <= 15 days in Tab 2. Update Column F to "Return Approved".
@@ -283,12 +288,25 @@ async function handleAgentActions(
   const isOrderCreation = !isReturnRefund && (
     /place.*order|i want to buy|want to buy|buy|purchase|confirm order/i.test(lowerMsg) ||
     /order\s*:/i.test(lowerMsg) ||
-    (lowerMsg.includes("order") && (lowerMsg.includes("iphone") || lowerMsg.includes("laptop") || lowerMsg.includes("phone") || lowerMsg.includes("samsung") || lowerMsg.includes("dell")))
+    (lowerMsg.includes("order") && (lowerMsg.includes("iphone") || lowerMsg.includes("laptop") || lowerMsg.includes("phone") || lowerMsg.includes("samsung") || lowerMsg.includes("dell") || lowerMsg.includes("legion")))
   );
 
   if (isOrderCreation) {
-    const customerName = extractCustomerName(lastUserMsg) || extractCustomerName(userFullText) || "Customer";
+    const customerName = extractCustomerName(lastUserMsg) || extractCustomerName(userFullText);
     const matched = findMatchingProduct(lastUserMsg, products);
+
+    // COMPULSORY CUSTOMER NAME CHECK
+    if (!customerName || customerName === "Customer") {
+      const prodTitle = matched ? matched.name : "your requested product";
+      return {
+        text: `### 👤 Customer Name Required
+
+To place your order for **${prodTitle}**, please reply with your **Full Name** (for example: *"my name is Imran"* or *"Zulqi"*).
+
+Once you provide your name, we will immediately process and confirm your order in **Tab 2 (Orders)**!`,
+        timestamp: new Date().toISOString()
+      };
+    }
 
     if (matched) {
       if (matched.stock <= 0) {
@@ -321,7 +339,10 @@ Your order for **${matched.name}** has been confirmed and placed in **Tab 2 (Ord
       let productName = "Apple iPhone 16 Pro Max";
       let category = "Phone";
 
-      if (lowerMsg.includes("samsung") || lowerMsg.includes("s25")) {
+      if (lowerMsg.includes("legion") || lowerMsg.includes("lenovo")) {
+        productName = "Lenovo Legion Pro 5";
+        category = "Laptop";
+      } else if (lowerMsg.includes("samsung") || lowerMsg.includes("s25")) {
         productName = "Samsung Galaxy S25 Ultra";
         category = "Phone";
       } else if (lowerMsg.includes("iphone") || lowerMsg.includes("apple")) {
