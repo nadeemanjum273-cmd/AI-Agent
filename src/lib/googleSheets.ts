@@ -15,7 +15,6 @@ export interface BankDetails {
   mobile_number: string;
 }
 
-// Memory cache initialized empty - all data is fetched in real-time from Google Sheets
 let memoryProducts: Product[] = [];
 let memoryOrders: Order[] = [];
 let memoryLogs: InteractionLog[] = [];
@@ -79,7 +78,6 @@ export async function fetchProducts(): Promise<Product[]> {
     const fetchedProducts = rows
       .filter((row) => row && row.length > 0 && row[0])
       .map((row, index) => {
-        // Handle 7-column layout (Category, Brand, Model Name, Key Specifications, Best For, price, stock)
         if (row.length <= 7 || isNaN(parseFloat(row[0]))) {
           const category = row[0] || "General";
           const brand = row[1] || "";
@@ -104,7 +102,6 @@ export async function fetchProducts(): Promise<Product[]> {
           };
         }
 
-        // Standard 8-column layout (ID, Name, Category, Price, Stock, Rating, Discount, Description)
         return {
           id: row[0] || `PROD-${101 + index}`,
           name: row[1] || "",
@@ -151,7 +148,6 @@ export async function fetchOrders(): Promise<Order[]> {
     const fetchedOrders = rows
       .filter((row) => row && row.length > 0 && row[0])
       .map((row) => {
-        // Check if user's 5-6 column format (order_id, customer, product, category, days_ago, Refund Status)
         if (row.length <= 6 || (row[4] && !isNaN(parseInt(row[4], 10)) && row[4].length <= 3)) {
           const daysAgo = parseInt(row[4], 10) || 0;
           const d = new Date();
@@ -172,7 +168,6 @@ export async function fetchOrders(): Promise<Order[]> {
           };
         }
 
-        // Standard 10-column format
         return {
           order_id: row[0] || "",
           customer_name: row[1] || "",
@@ -198,15 +193,14 @@ export async function fetchOrders(): Promise<Order[]> {
 export async function getOrderById(orderId: string): Promise<Order | null> {
   const orders = await fetchOrders();
   const cleanInput = orderId.trim().toLowerCase();
-  
-  // Extract number if present (e.g. "107" from "order number 107" or "107")
+
   const numMatch = cleanInput.match(/\d+/);
   const numStr = numMatch ? numMatch[0] : "";
 
   const found = orders.find((o) => {
     const oId = o.order_id.toLowerCase();
     const oIdNum = oId.replace(/\D/g, "");
-    
+
     return (
       oId === cleanInput ||
       oId === `ord-${cleanInput}` ||
@@ -283,21 +277,21 @@ export async function saveBankDetails(data: BankDetails): Promise<boolean> {
       try {
         await sheets.spreadsheets.values.append({
           spreadsheetId: activeSheetId,
-          range: 'Bank_Details!A:F',
-          valueInputOption: 'USER_ENTERED',
+          range: "Bank_Details!A:F",
+          valueInputOption: "USER_ENTERED",
           requestBody: { values: [rowValues] }
         });
       } catch {
         await sheets.spreadsheets.values.append({
           spreadsheetId: activeSheetId,
-          range: 'Bank_details!A:F',
-          valueInputOption: 'USER_ENTERED',
+          range: "Bank_details!A:F",
+          valueInputOption: "USER_ENTERED",
           requestBody: { values: [rowValues] }
         });
       }
       return true;
     } catch (err) {
-      console.warn('Failed to save bank details to Google Sheets:', err);
+      console.warn("Failed to save bank details to Google Sheets:", err);
     }
   }
   return true;
@@ -311,63 +305,12 @@ export async function logInteraction(log: Omit<InteractionLog, "log_id" | "times
   };
 
   memoryLogs.unshift(newLog);
-
-  const sheets = getSheetsClient();
-  if (sheets) {
-    try {
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: SHEET_ID,
-        range: "Bank_Details!F:L",
-        valueInputOption: "USER_ENTERED",
-        requestBody: {
-          values: [
-            [
-              newLog.log_id,
-              newLog.timestamp,
-              newLog.customer_email,
-              newLog.order_id,
-              newLog.action_type,
-              newLog.status,
-              newLog.details
-            ]
-          ]
-        }
-      });
-    } catch (err) {
-      console.warn("Failed to append interaction log to Google Sheets:", err);
-    }
-  }
-
+  // Do NOT pollute Tab 3 (Bank_details) with interaction logs!
   return newLog;
 }
 
 export async function fetchLogs(): Promise<InteractionLog[]> {
-  const sheets = getSheetsClient();
-  if (!sheets) return memoryLogs;
-
-  try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: "Bank_Details!F2:L100"
-    });
-
-    const rows = res.data.values;
-    if (!rows || rows.length === 0) return memoryLogs;
-
-    const sheetsLogs: InteractionLog[] = rows.map((row) => ({
-      log_id: row[0] || "",
-      timestamp: row[1] || new Date().toISOString(),
-      customer_email: row[2] || "",
-      order_id: row[3] || "",
-      action_type: (row[4] as InteractionLog["action_type"]) || "Order Inquiry",
-      status: (row[5] as InteractionLog["status"]) || "Completed",
-      details: row[6] || ""
-    }));
-
-    return [...sheetsLogs, ...memoryLogs];
-  } catch {
-    return memoryLogs;
-  }
+  return memoryLogs;
 }
 
 export async function createNewOrder(
@@ -387,8 +330,8 @@ export async function createNewOrder(
 
   const newOrder: Order = {
     order_id: newOrderId,
-    customer_name: customerName || "Nadeem",
-    customer_email: `${(customerName || "nadeem").toLowerCase().replace(/\s+/g, ".")}@example.com`,
+    customer_name: customerName || "Customer",
+    customer_email: `${(customerName || "customer").toLowerCase().replace(/\s+/g, ".")}@example.com`,
     product_id: `PROD-${newOrderId}`,
     product_name: productName,
     quantity: 1,
@@ -404,14 +347,13 @@ export async function createNewOrder(
   if (sheets) {
     const activeSheetId = process.env.GOOGLE_SHEETS_ID || SHEET_ID;
     try {
-      let targetRange = "Orders!A:F";
       try {
         await sheets.spreadsheets.values.append({
           spreadsheetId: activeSheetId,
           range: "Orders!A:F",
           valueInputOption: "USER_ENTERED",
           requestBody: {
-            values: [[newOrderId, customerName || "Nadeem", productName, category, "0", "Delivered"]]
+            values: [[newOrderId, customerName || "Customer", productName, category, "0", "Delivered"]]
           }
         });
       } catch {
@@ -420,7 +362,7 @@ export async function createNewOrder(
           range: "orders!A:F",
           valueInputOption: "USER_ENTERED",
           requestBody: {
-            values: [[newOrderId, customerName || "Nadeem", productName, category, "0", "Delivered"]]
+            values: [[newOrderId, customerName || "Customer", productName, category, "0", "Delivered"]]
           }
         });
       }
