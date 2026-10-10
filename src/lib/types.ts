@@ -18,7 +18,7 @@ export interface Order {
   quantity: number;
   total_price: number;
   order_date: string;
-  status: "Delivered" | "Shipped" | "Processing" | "Refunded" | "Refund Pending" | "Refund Approved" | "Return Approved";
+  status: string;
   is_electronics: boolean;
   is_final_sale?: boolean;
 }

@@ -163,7 +163,7 @@ export async function fetchOrders(): Promise<Order[]> {
             quantity: 1,
             total_price: row[3]?.toLowerCase().includes("electr") ? 499.99 : 99.99,
             order_date: orderDateStr,
-            status: (row[5] as Order["status"]) || "Delivered",
+            status: (row[5] as Order["status"]) || "",
             is_electronics: row[3]?.toLowerCase().includes("electr") || false
           };
         }
@@ -177,7 +177,7 @@ export async function fetchOrders(): Promise<Order[]> {
           quantity: parseInt(row[5], 10) || 1,
           total_price: parseFloat(row[6]) || 0,
           order_date: row[7] || "",
-          status: (row[8] as Order["status"]) || "Delivered",
+          status: (row[8] as Order["status"]) || "",
           is_electronics: row[9]?.toLowerCase() === "true"
         };
       });
@@ -337,7 +337,7 @@ export async function createNewOrder(
     quantity: 1,
     total_price: category.toLowerCase().includes("electr") ? 499.99 : 99.99,
     order_date: todayStr,
-    status: "Delivered",
+    status: "",
     is_electronics: true
   };
 
@@ -353,7 +353,7 @@ export async function createNewOrder(
           range: "Orders!A:F",
           valueInputOption: "USER_ENTERED",
           requestBody: {
-            values: [[newOrderId, customerName || "Customer", productName, category, "0", "Delivered"]]
+            values: [[newOrderId, customerName || "Customer", productName, category, "0", ""]]
           }
         });
       } catch {
@@ -362,7 +362,7 @@ export async function createNewOrder(
           range: "orders!A:F",
           valueInputOption: "USER_ENTERED",
           requestBody: {
-            values: [[newOrderId, customerName || "Customer", productName, category, "0", "Delivered"]]
+            values: [[newOrderId, customerName || "Customer", productName, category, "0", ""]]
           }
         });
       }

@@ -332,7 +332,7 @@ Your order for **${matched.name}** has been confirmed and placed in **Tab 2 (Ord
 - **Customer Name:** ${newOrder.customer_name}
 - **Product Name:** ${newOrder.product_name}
 - **Category:** ${matched.category || "Phone"}
-- **Status:** Recorded live in Google Sheets **Orders** tab!`,
+- **Refund Status:** (Blank - Eligible for return)`,
         timestamp: new Date().toISOString()
       };
     } else {
@@ -380,7 +380,7 @@ Your order for **${productName}** has been confirmed and placed in **Tab 2 (Orde
 - **Customer Name:** ${newOrder.customer_name}
 - **Product Name:** ${newOrder.product_name}
 - **Category:** ${category}
-- **Status:** Recorded live in Google Sheets **Orders** tab!`,
+- **Refund Status:** (Blank - Eligible for return)`,
         timestamp: new Date().toISOString()
       };
     }
